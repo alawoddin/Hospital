@@ -3,18 +3,31 @@
 namespace App\Http\Controllers;
 
 use App\Models\Company;
+use App\Models\Medicine;
+use App\Models\MedicineCategory;
+use App\Models\MedicineStock;
 use App\Models\Prescription;
+use App\Models\PrescriptionItem;
 use App\Models\Product;
 use App\Models\Supplier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Intervention\Image\ImageManager;
 use Intervention\Image\Drivers\Gd\Driver;
 
 class PharmacyController extends Controller
 {
     public function PharmacyDashboard() {
-        return view('backend.pharmacy.index');
+        $medicineStock = MedicineStock::sum('quantity');
+        $expiringMedicines = MedicineStock::whereNotNull('expiry_date')
+            ->whereDate('expiry_date', '<=', now()->addDays(30))
+            ->count();
+        $pendingPrescriptions = Prescription::where('pharmacy_id', Auth::id())
+            ->where('status', 'pending')
+            ->count();
+
+        return view('backend.pharmacy.index', compact('medicineStock', 'expiringMedicines', 'pendingPrescriptions'));
     }
 
 
@@ -340,6 +353,193 @@ class PharmacyController extends Controller
             'expiry_date'=> $request->expiry_date,
         ]);
         return redirect()->route('all.expires.medicine');
+    }
+
+    public function AllMedicines()
+    {
+        $medicines = Medicine::with('category', 'stocks')->latest()->get();
+
+        return view('backend.pharmacy.medicines.index', compact('medicines'));
+    }
+
+    public function AddMedicine()
+    {
+        $categories = MedicineCategory::orderBy('name')->get();
+
+        return view('backend.pharmacy.medicines.add', compact('categories'));
+    }
+
+    public function StoreMedicine(Request $request)
+    {
+        $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'medicine_category_id' => ['nullable', 'exists:medicine_categories,id'],
+            'generic_name' => ['nullable', 'string', 'max:255'],
+            'description' => ['nullable', 'string'],
+            'unit_price' => ['required', 'numeric', 'min:0'],
+            'unit' => ['nullable', 'string', 'max:50'],
+            'batch_no' => ['nullable', 'string', 'max:100'],
+            'quantity' => ['nullable', 'integer', 'min:0'],
+            'expiry_date' => ['nullable', 'date'],
+        ]);
+
+        DB::transaction(function () use ($request) {
+            $medicine = Medicine::create($request->only([
+                'name', 'medicine_category_id', 'generic_name', 'description', 'unit_price', 'unit',
+            ]));
+
+            if ($request->filled('quantity')) {
+                MedicineStock::create([
+                    'medicine_id' => $medicine->id,
+                    'batch_no' => $request->batch_no,
+                    'quantity' => $request->quantity,
+                    'expiry_date' => $request->expiry_date,
+                    'purchase_price' => $request->unit_price,
+                ]);
+            }
+        });
+
+        return redirect()->route('pharmacy.medicines')->with('success', 'Medicine added.');
+    }
+
+    public function EditMedicine($id)
+    {
+        $medicine = Medicine::with('stocks')->findOrFail($id);
+        $categories = MedicineCategory::orderBy('name')->get();
+
+        return view('backend.pharmacy.medicines.edit', compact('medicine', 'categories'));
+    }
+
+    public function UpdateMedicine(Request $request)
+    {
+        $medicine = Medicine::findOrFail($request->id);
+
+        $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'medicine_category_id' => ['nullable', 'exists:medicine_categories,id'],
+            'generic_name' => ['nullable', 'string', 'max:255'],
+            'description' => ['nullable', 'string'],
+            'unit_price' => ['required', 'numeric', 'min:0'],
+            'unit' => ['nullable', 'string', 'max:50'],
+            'is_active' => ['nullable', 'boolean'],
+        ]);
+
+        $medicine->update([
+            'name' => $request->name,
+            'medicine_category_id' => $request->medicine_category_id,
+            'generic_name' => $request->generic_name,
+            'description' => $request->description,
+            'unit_price' => $request->unit_price,
+            'unit' => $request->unit ?? $medicine->unit,
+            'is_active' => $request->boolean('is_active', true),
+        ]);
+
+        return redirect()->route('pharmacy.medicines')->with('success', 'Medicine updated.');
+    }
+
+    public function AddMedicineStock($id)
+    {
+        $medicine = Medicine::findOrFail($id);
+
+        return view('backend.pharmacy.medicines.stock', compact('medicine'));
+    }
+
+    public function StoreMedicineStock(Request $request, $id)
+    {
+        $medicine = Medicine::findOrFail($id);
+
+        $request->validate([
+            'batch_no' => ['nullable', 'string', 'max:100'],
+            'quantity' => ['required', 'integer', 'min:1'],
+            'expiry_date' => ['nullable', 'date'],
+            'purchase_price' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        MedicineStock::create([
+            'medicine_id' => $medicine->id,
+            'batch_no' => $request->batch_no,
+            'quantity' => $request->quantity,
+            'expiry_date' => $request->expiry_date,
+            'purchase_price' => $request->purchase_price,
+        ]);
+
+        return redirect()->route('pharmacy.medicines')->with('success', 'Stock added.');
+    }
+
+    public function AllMedicineCategories()
+    {
+        $categories = MedicineCategory::withCount('medicines')->get();
+
+        return view('backend.pharmacy.categories.index', compact('categories'));
+    }
+
+    public function StoreMedicineCategory(Request $request)
+    {
+        $request->validate([
+            'name' => ['required', 'string', 'max:255', 'unique:medicine_categories,name'],
+            'description' => ['nullable', 'string'],
+        ]);
+
+        MedicineCategory::create($request->only('name', 'description'));
+
+        return back()->with('success', 'Category created.');
+    }
+
+    public function DispensePrescription(Request $request, $id)
+    {
+        $prescription = Prescription::with('items')->where('pharmacy_id', Auth::id())->findOrFail($id);
+        $this->authorize('dispense', $prescription);
+
+        DB::transaction(function () use ($prescription) {
+            foreach ($prescription->items as $item) {
+                if ($item->dispensed) {
+                    continue;
+                }
+
+                if ($item->medicine_id) {
+                    $remaining = $item->quantity;
+                    $stocks = MedicineStock::where('medicine_id', $item->medicine_id)
+                        ->where('quantity', '>', 0)
+                        ->orderBy('expiry_date')
+                        ->lockForUpdate()
+                        ->get();
+
+                    foreach ($stocks as $stock) {
+                        if ($remaining <= 0) {
+                            break;
+                        }
+
+                        $deduct = min($remaining, $stock->quantity);
+                        $stock->decrement('quantity', $deduct);
+                        $remaining -= $deduct;
+                    }
+
+                    if ($remaining > 0) {
+                        throw new \RuntimeException('Insufficient stock for '.$item->medicine);
+                    }
+                }
+
+                $item->update(['dispensed' => true]);
+            }
+
+            $allDispensed = $prescription->items()->where('dispensed', false)->doesntExist();
+            $prescription->update([
+                'status' => $allDispensed ? 'dispensed' : 'partially_dispensed',
+            ]);
+        });
+
+        return back()->with('success', 'Prescription dispensed and stock updated.');
+    }
+
+    public function PharmacyReports()
+    {
+        $lowStock = Medicine::with('stocks')->get()->filter(fn ($m) => $m->totalStock() <= 10);
+        $expiring = MedicineStock::with('medicine')->whereNotNull('expiry_date')
+            ->whereDate('expiry_date', '<=', now()->addDays(30))
+            ->get();
+        $dispensedCount = Prescription::where('pharmacy_id', Auth::id())->where('status', 'dispensed')->count();
+
+        return view('backend.pharmacy.reports.index', compact('lowStock', 'expiring', 'dispensedCount'));
     }
 
 }

@@ -1,118 +1,133 @@
 @extends('backend.doctor_dashboard')
 @section('doctor')
-
-<div class="row mt-5">
-    <div class="col-xl-10 col-lg-10 col-md-8 mx-auto">
-        <div class="card">
+<div class="row mt-4">
+    <div class="col-xl-10 mx-auto">
+        @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
+        <div class="card mb-4">
             <div class="card-body">
-                <div class="text-center">
-                    <div class="profile-photo">
-                        <img src="{{ asset($patients->photo) }}" width="200" class="img-fluid rounded-circle" alt="">
-                    </div>
-                    <h3 class="mt-4 mb-1">{{ $patients->name }}</h3>
-                    <p class="text-muted">{{ $patients->email }}</p>
-                </div>
-            </div>
-            <div class="card-footer pt-0 pb-0 text-center">
-                <div class="row">
-                    <div class="col-12 pt-3 pb-3 border-bottom float-left d-flex">
-                        <h4>Name: <span style="margin-left: 20px; color:rgb(19, 120, 167);">{{ $patients->name }}</span></h4>
-                    </div>
-                    <div class="col-12 pt-3 pb-3 border-bottom float-left d-flex">
-                        <h4>Father Name: <span style="margin-left: 20px; color:rgb(19, 120, 167);">{{ $patients->father_name }}</span></h4>
-                    </div>
-                    <div class="col-12 pt-3 pb-3 border-bottom float-left d-flex">
-                        <h4>Last Name: <span style="margin-left: 20px; color:rgb(19, 120, 167);">{{ $patients->last_name }}</span></h4>
-                    </div>
-                    <div class="col-12 pt-3 pb-3 border-bottom float-left d-flex">
-                        <h4>Gender: <span style="margin-left: 20px; color:rgb(19, 120, 167);">{{ $patients->gender }}</span></h4>
-                    </div>
-                    <div class="col-12 pt-3 pb-3 border-bottom float-left d-flex">
-                        <h4>Age: <span style="margin-left: 20px; color:rgb(19, 120, 167);">{{ $patients->age }}</span></h4>
-                    </div>
-                    <div class="col-12 pt-3 pb-3 border-bottom float-left d-flex">
-                        <h4>Email: <span style="margin-left: 20px; color:rgb(19, 120, 167);">{{ $patients->email }}</span></h4>
-                    </div>
-                    <div class="col-12 pt-3 pb-3 border-bottom float-left d-flex">
-                        <h4>Phone: <span style="margin-left: 20px; color:rgb(19, 120, 167);">{{ $patients->phone }}</span></h4>
-                    </div>
-                    <div class="col-12 pt-3 pb-3 border-bottom float-left d-flex">
-                        <h4>Address: <span style="margin-left: 20px; color:rgb(19, 120, 167);">{{ $patients->address }}</span></h4>
-                    </div>
-                    <div class="col-12 pt-3 pb-3 border-bottom float-left d-flex">
-                        <h4>National ID: <span style="margin-left: 20px; color:rgb(19, 120, 167);">{{ $patients->national_id }}</span></h4>
-                    </div>
-                </div>
+                <h3>{{ $patient->name }}</h3>
+                <p>Phone: {{ $patient->phone }} | Email: {{ $patient->email }} | Age: {{ $patient->age }}</p>
             </div>
         </div>
-    </div>
-    <div class="col-xl-10 col-lg-10 col-md-10 mx-auto">
-        <form action="{{ route('doctor.store.prescription') }}" method="POST">
-            @csrf
-            <div class="card">
-                <div class="card-header">
-                    <div class="text-start">
-                        <h3>Prescription</h3>
+
+        <div class="card mb-4">
+            <div class="card-header"><h5>Add Diagnosis</h5></div>
+            <div class="card-body">
+                <form action="{{ route('doctor.store.diagnosis', $patient->id) }}" method="POST" class="row">
+                    @csrf
+                    <div class="col-md-4 mb-2">
+                        <select name="appointment_id" class="form-control">
+                            <option value="">Appointment (optional)</option>
+                            @foreach($appointments as $appt)
+                                <option value="{{ $appt->id }}">{{ $appt->appointment_date }} - #{{ $appt->token_number }}</option>
+                            @endforeach
+                        </select>
                     </div>
-                </div>
-                <div class="card-body">
-                    <div class="col-12 d-flex">
-                        <input type="hidden" class="form-control" name="doctor_id" id="doctor" value="{{ auth()->id() }}">
-                        <input type="hidden" class="form-control" name="patient_id" value="{{ $patients->id }}" id="patient">
-                        <div class="col-4">
-                            <label for="pharmacy">Select Pharmacy:</label>
-                            <select name="pharmacy_id" id="pharmacy" class="form-control">
-                                <option value="">-- Select Pharmacy --</option>
+                    <div class="col-md-4 mb-2"><input type="text" name="title" class="form-control" placeholder="Diagnosis title" required></div>
+                    <div class="col-md-4 mb-2"><input type="text" name="severity" class="form-control" placeholder="Severity"></div>
+                    <div class="col-12 mb-2"><textarea name="description" class="form-control" placeholder="Description"></textarea></div>
+                    <div class="col-12"><button class="btn btn-primary">Save Diagnosis</button></div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header"><h5>Medical Note</h5></div>
+            <div class="card-body">
+                <form action="{{ route('doctor.store.medical_note', $patient->id) }}" method="POST">
+                    @csrf
+                    <textarea name="note" class="form-control mb-2" required></textarea>
+                    <button class="btn btn-primary">Add Note</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header"><h5>Treatment Plan</h5></div>
+            <div class="card-body">
+                <form action="{{ route('doctor.store.treatment_plan', $patient->id) }}" method="POST" class="row">
+                    @csrf
+                    <div class="col-md-6 mb-2"><input type="text" name="title" class="form-control" placeholder="Plan title" required></div>
+                    <div class="col-md-3 mb-2"><input type="date" name="start_date" class="form-control"></div>
+                    <div class="col-md-3 mb-2"><input type="date" name="end_date" class="form-control"></div>
+                    <div class="col-12 mb-2"><textarea name="plan" class="form-control" placeholder="Treatment plan" required></textarea></div>
+                    <div class="col-12"><button class="btn btn-primary">Save Plan</button></div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header"><h5>Lab Request</h5></div>
+            <div class="card-body">
+                <form action="{{ route('doctor.store.lab_request', $patient->id) }}" method="POST" class="row">
+                    @csrf
+                    <div class="col-md-6 mb-2"><input type="text" name="test_name" class="form-control" placeholder="Test name" required></div>
+                    <div class="col-12 mb-2"><textarea name="instructions" class="form-control" placeholder="Instructions"></textarea></div>
+                    <div class="col-12"><button class="btn btn-primary">Request Test</button></div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header"><h5>Prescription</h5></div>
+            <div class="card-body">
+                <form action="{{ route('doctor.store.prescription') }}" method="POST">
+                    @csrf
+                    <input type="hidden" name="patient_id" value="{{ $patient->id }}">
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label>Pharmacy</label>
+                            <select name="pharmacy_id" class="form-control" required>
+                                <option value="">Select pharmacy</option>
                                 @foreach($pharmacies as $pharmacy)
                                     <option value="{{ $pharmacy->id }}">{{ $pharmacy->name }}</option>
                                 @endforeach
                             </select>
                         </div>
-                    </div>
-                    <div class="col-12 d-flex mt-5" style="justify-content: end; align-items: center;">
-                        <div class="text-end">
-                            <button type="button" class="btn btn-primary" id="addBtn">Add</button>
-                            <button type="button" class="btn btn-danger" id="removeBtn">Delete</button>
+                        <div class="col-md-4">
+                            <label>Appointment</label>
+                            <select name="appointment_id" class="form-control">
+                                <option value="">Optional</option>
+                                @foreach($appointments as $appt)
+                                    <option value="{{ $appt->id }}">{{ $appt->appointment_date }}</option>
+                                @endforeach
+                            </select>
                         </div>
                     </div>
                     <div id="medicineWrapper">
-                        <div class="col-12 d-flex mt-3 medicine-row">
-                            <div class="col-4">
-                                <label for="medicine">Medicin</label>
-                                <input type="text" name="medicine[]" class="form-control">
-                            </div>
-                            <div class="col-4">
-                                <label for="desc">Description</label>
-                                <textarea name="desc[]" id="desc" cols="30" rows="1" class="form-control"></textarea>
-                            </div>
+                        <div class="row medicine-row mb-2">
+                            <div class="col-md-3"><input type="text" name="medicine[]" class="form-control" placeholder="Medicine" required></div>
+                            <div class="col-md-2"><input type="text" name="dosage[]" class="form-control" placeholder="Dosage"></div>
+                            <div class="col-md-2"><input type="text" name="frequency[]" class="form-control" placeholder="Frequency"></div>
+                            <div class="col-md-2"><input type="number" name="quantity[]" class="form-control" value="1" min="1"></div>
+                            <div class="col-md-3"><textarea name="desc[]" class="form-control" placeholder="Notes"></textarea></div>
                         </div>
                     </div>
-                    <div class="col-4">
-                        <button type="submit" class="btn btn-primary mt-4">Submit</button>
-                    </div>
-                </div>
+                    <button type="button" class="btn btn-sm btn-secondary" id="addBtn">Add Medicine</button>
+                    <button type="submit" class="btn btn-success mt-3">Submit Prescription</button>
+                </form>
             </div>
-        </form>
-</div>
-</div>
+        </div>
 
+        <div class="card">
+            <div class="card-header"><h5>Patient History</h5></div>
+            <div class="card-body">
+                <h6>Diagnoses</h6>
+                <ul>@foreach($patient->diagnoses as $d)<li>{{ $d->title }} - {{ $d->created_at->format('Y-m-d') }}</li>@endforeach</ul>
+                <h6>Medical Notes</h6>
+                <ul>@foreach($patient->medicalNotes as $n)<li>{{ $n->note }}</li>@endforeach</ul>
+                <h6>Lab Requests</h6>
+                <ul>@foreach($patient->labRequests as $l)<li>{{ $l->test_name }} ({{ $l->status }})</li>@endforeach</ul>
+            </div>
+        </div>
+    </div>
+</div>
 <script>
-    document.getElementById('addBtn').addEventListener('click', function () {
-        let wrapper = document.getElementById('medicineWrapper');
-        let newRow = document.querySelector('.medicine-row').cloneNode(true);
-
-        newRow.querySelectorAll('input, textarea').forEach(el => el.value = '');
-
-        wrapper.appendChild(newRow);
-    });
-
-    document.getElementById('removeBtn').addEventListener('click', function () {
-        let wrapper = document.getElementById('medicineWrapper');
-        let rows = wrapper.querySelectorAll('.medicine-row');
-        if (rows.length > 1) {
-            wrapper.removeChild(rows[rows.length - 1]);
-        }
-    });
+document.getElementById('addBtn').addEventListener('click', function () {
+    const wrapper = document.getElementById('medicineWrapper');
+    const row = wrapper.querySelector('.medicine-row').cloneNode(true);
+    row.querySelectorAll('input, textarea').forEach(el => el.value = el.name.includes('quantity') ? '1' : '');
+    wrapper.appendChild(row);
+});
 </script>
-
 @endsection

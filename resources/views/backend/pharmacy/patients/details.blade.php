@@ -98,6 +98,14 @@
             </tbody>
         </table>
         </div>
+        @if($prescription->status !== 'dispensed')
+        <form action="{{ route('pharmacy.prescription.dispense', $prescription->id) }}" method="POST" class="mt-3">
+            @csrf
+            <button type="submit" class="btn btn-success" onclick="return confirm('Dispense medicines and deduct stock?')">Dispense Prescription</button>
+        </form>
+        @else
+        <p class="text-success mt-3">Prescription dispensed.</p>
+        @endif
     </div>
 </div>
 

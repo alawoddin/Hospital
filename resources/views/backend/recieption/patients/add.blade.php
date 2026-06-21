@@ -41,9 +41,9 @@
             </div>
             <div class="col-xl-4 col-xxl-4 col-lg-4 mx-auto">
                 <label>Doctor: </label>
-                <select class="form-control" id="doctor" name="doctor">
+                <select class="form-control" id="doctor_id" name="doctor_id">
                     @foreach ($doctors as $doctor)
-                        <option value="{{ $doctor->name }}">{{ $doctor->name }}</option>
+                        <option value="{{ $doctor->id }}">{{ $doctor->name }}</option>
                     @endforeach
                 </select>
             </div>

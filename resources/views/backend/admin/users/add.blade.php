@@ -26,13 +26,13 @@
                         </div>
                         <div class="col-sm-6 mt-2 mt-sm-0">
                             <label>Role: </label>
-                            <select class="form-control" id="sel1" name="role">
-                                    <option>Admin</option>
-                                    <option>Doctor</option>
-                                    <option>Recieption</option>
-                                    <option>Finance</option>
-                                    <option>Pharmacy</option>
-                                    <option>User</option>
+                            <select class="form-control" id="sel1" name="role" required>
+                                    <option value="admin">Admin</option>
+                                    <option value="doctor">Doctor</option>
+                                    <option value="recieption">Reception</option>
+                                    <option value="finance">Finance</option>
+                                    <option value="pharmacy">Pharmacy</option>
+                                    <option value="user">Patient (User)</option>
                             </select>
                         </div>
                     </div>

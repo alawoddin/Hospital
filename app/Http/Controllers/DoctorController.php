@@ -2,48 +2,59 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StorePrescriptionRequest;
+use App\Models\Appointment;
+use App\Models\Diagnosis;
+use App\Models\LabRequest;
+use App\Models\MedicalNote;
 use App\Models\Patient;
 use App\Models\Prescription;
 use App\Models\PrescriptionItem;
-use App\Models\Appointment;
+use App\Models\TreatmentPlan;
 use App\Models\User;
-use Faker\Core\File;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Intervention\Image\ImageManager;
 use Intervention\Image\Drivers\Gd\Driver;
-
+use Intervention\Image\ImageManager;
 
 class DoctorController extends Controller
 {
-    public function DoctorDashboard() {
-        $totalPatients = Patient::count();
-        return view('backend.doctor.index', compact('totalPatients'));
+    public function DoctorDashboard()
+    {
+        $doctor = Auth::user();
+        $todayAppointments = Appointment::where('doctor_id', $doctor->id)
+            ->whereDate('appointment_date', today())
+            ->where('status', 'confirmed')
+            ->count();
+        $assignedPatients = Patient::where('doctor_id', $doctor->id)
+            ->orWhere('doctor', $doctor->name)
+            ->count();
+
+        return view('backend.doctor.index', compact('todayAppointments', 'assignedPatients'));
     }
 
-    //Logout Route
-    public function DoctorLogout(Request $request) {
+    public function DoctorLogout(Request $request)
+    {
         Auth::guard('web')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
+
         return redirect('/login');
     }
-    // End Logout
-    // Doctor Profile
-    public function DoctorProfile(){
+
+    public function DoctorProfile()
+    {
         $doctor = Auth::user();
+
         return view('backend.doctor.profile.doctor_profile', compact('doctor'));
     }
-    // End Doctor Profile
 
-    // Update Profile
-    public function UpdateDoctorProfile(Request $request) {
-
+    public function UpdateDoctorProfile(Request $request)
+    {
         $doctor = Auth::user();
 
-       if ($request->file('photo')) {
-
+        if ($request->file('photo')) {
             if ($doctor->photo && file_exists(public_path($doctor->photo))) {
                 unlink(public_path($doctor->photo));
             }
@@ -52,168 +63,234 @@ class DoctorController extends Controller
             $manager = new ImageManager(new Driver());
             $name_gen = hexdec(uniqid()).'.'.$image->getClientOriginalExtension();
             $img = $manager->read($image);
-            $img->resize(150,150)->save(public_path('upload/doctor/profile/'.$name_gen));
-            $save_url = 'upload/doctor/profile/'.$name_gen;
-
-            $doctor->photo = $save_url;
+            $img->resize(150, 150)->save(public_path('upload/doctor/profile/'.$name_gen));
+            $doctor->photo = 'upload/doctor/profile/'.$name_gen;
         }
 
         $doctor->name = $request->name;
         $doctor->phone = $request->phone;
         $doctor->address = $request->address;
-        $doctor->role = $request->role;
-
         $doctor->save();
+
         return redirect()->route('doctor.profile');
     }
-    // End Update Profile
 
-    // Doctor Patients
-    public function DoctorPatients(){
-        $doctorName = Auth::user()->name;
-        $patients = Patient::where('doctor', $doctorName)->get();
+    public function DoctorPatients()
+    {
+        $doctor = Auth::user();
+        $patients = Patient::where('doctor_id', $doctor->id)
+            ->orWhere('doctor', $doctor->name)
+            ->orWhereHas('appointments', fn ($q) => $q->where('doctor_id', $doctor->id))
+            ->distinct()
+            ->get();
+
         return view('backend.doctor.patients.index', compact('patients'));
     }
-    // End Doctor Patients
 
-    // Patients Info 
-    public function PatientsInfo($id) {
-        $patients = Patient::findOrFail($id);
+    public function PatientsInfo($id)
+    {
+        $patient = Patient::with([
+            'diagnoses.doctor',
+            'medicalNotes.doctor',
+            'treatmentPlans',
+            'labRequests',
+            'prescriptions.items',
+            'appointments' => fn ($q) => $q->where('doctor_id', Auth::id())->latest(),
+        ])->findOrFail($id);
+
+        $this->authorize('view', $patient);
+
         $pharmacies = User::where('role', 'pharmacy')->get();
-        return view('backend.doctor.patients.patients_info', compact('patients','pharmacies'));
-    }
-    // Store Patients Prescription
-    public function StorePrescription(Request $request)
-{
-    $request->validate([
-        'doctor_id'=> 'required|exists:users,id',
-        'patient_id'=> 'required|exists:patients,id',
-        'pharmacy_id'=> 'required|exists:users,id',
-        'medicine.*'=> 'required|string',
-        'desc.*'=> 'nullable|string',
-    ]);
+        $appointments = Appointment::where('patient_id', $patient->id)
+            ->where('doctor_id', Auth::id())
+            ->where('status', 'confirmed')
+            ->latest()
+            ->get();
 
-    DB::transaction(function () use ($request) {
-        $prescription = Prescription::create([
-            'doctor_id'=> $request->doctor_id,
-            'patient_id'=> $request->patient_id,
-            'pharmacy_id'=> $request->pharmacy_id,
+        return view('backend.doctor.patients.patients_info', compact('patient', 'pharmacies', 'appointments'));
+    }
+
+    public function StorePrescription(StorePrescriptionRequest $request)
+    {
+        $patient = Patient::findOrFail($request->patient_id);
+        $this->authorize('view', $patient);
+
+        DB::transaction(function () use ($request) {
+            $prescription = Prescription::create([
+                'doctor_id' => Auth::id(),
+                'patient_id' => $request->patient_id,
+                'pharmacy_id' => $request->pharmacy_id,
+                'appointment_id' => $request->appointment_id,
+                'notes' => $request->notes,
+                'status' => 'pending',
+            ]);
+
+            foreach ($request->medicine as $index => $medicine) {
+                PrescriptionItem::create([
+                    'prescription_id' => $prescription->id,
+                    'medicine_id' => $request->medicine_id[$index] ?? null,
+                    'medicine' => $medicine,
+                    'desc' => $request->desc[$index] ?? null,
+                    'dosage' => $request->dosage[$index] ?? null,
+                    'frequency' => $request->frequency[$index] ?? null,
+                    'quantity' => $request->quantity[$index] ?? 1,
+                ]);
+            }
+        });
+
+        return redirect()->route('patients.info', $request->patient_id)->with('success', 'Prescription created.');
+    }
+
+    public function StoreDiagnosis(Request $request, $patientId)
+    {
+        $patient = Patient::findOrFail($patientId);
+        $this->authorize('view', $patient);
+
+        $request->validate([
+            'appointment_id' => ['nullable', 'exists:appointments,id'],
+            'title' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string'],
+            'severity' => ['nullable', 'string', 'max:50'],
         ]);
 
-        foreach ($request->medicine as $index => $medicine) {
-            PrescriptionItem::create([
-                'prescription_id'=> $prescription->id,
-                'medicine'=> $medicine,
-                'desc'=> $request->desc[$index] ?? null,
-            ]);
-        }
-    });
+        Diagnosis::create([
+            'patient_id' => $patient->id,
+            'doctor_id' => Auth::id(),
+            'appointment_id' => $request->appointment_id,
+            'title' => $request->title,
+            'description' => $request->description,
+            'severity' => $request->severity,
+        ]);
 
-    return redirect()->route('doctor.patients');
-}
-    // End Store Prescription
-    
-    // // Appointment Notification
-    // public function Notifications(){
-    //     $doctor = Auth::user();
-    //     $notifications = $doctor->notifications;
-    //     return view('backend.doctor.notification.notification', compact('notifications'));
-    // }
-    // // End Appointment Notification
+        return back()->with('success', 'Diagnosis recorded.');
+    }
 
-    // // Accept Appointment
-    // public function AcceptAppointment($id){
-    //     $appointment = Appointment::findOrFail($id);
-    //     $appointment->update(['status' => 'confirmed']);
+    public function StoreMedicalNote(Request $request, $patientId)
+    {
+        $patient = Patient::findOrFail($patientId);
+        $this->authorize('view', $patient);
 
-    //     // Optional: mark notification as read
-    //     auth()->user()->unreadNotifications()->where('data->appointment_id', $id)->update(['read_at' => now()]);
+        $request->validate([
+            'appointment_id' => ['nullable', 'exists:appointments,id'],
+            'note' => ['required', 'string'],
+        ]);
 
-    //     return redirect()->back()->with('success', 'Appointment confirmed!');
-    // }
-    // // End Accept Appointment
+        MedicalNote::create([
+            'patient_id' => $patient->id,
+            'doctor_id' => Auth::id(),
+            'appointment_id' => $request->appointment_id,
+            'note' => $request->note,
+        ]);
 
-    // // Ignore Appointment
-    // public function IgnoreAppointment($id){
-    //     $appointment = Appointment::findOrFail($id);
-    //     $appointment->update(['status' => 'canceled']);
+        return back()->with('success', 'Medical note added.');
+    }
 
-    //     // Optional: mark notification as read
-    //     auth()->user()->unreadNotifications()->where('data->appointment_id', $id)->update(['read_at' => now()]);
+    public function StoreTreatmentPlan(Request $request, $patientId)
+    {
+        $patient = Patient::findOrFail($patientId);
+        $this->authorize('view', $patient);
 
-    //     return redirect()->back()->with('success', 'Appointment ignored!');
-    // }
-    // // End Ignore Appointment
+        $request->validate([
+            'appointment_id' => ['nullable', 'exists:appointments,id'],
+            'diagnosis_id' => ['nullable', 'exists:diagnoses,id'],
+            'title' => ['required', 'string', 'max:255'],
+            'plan' => ['required', 'string'],
+            'start_date' => ['nullable', 'date'],
+            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+        ]);
 
-    // public function appointmentCount(){
-    //     $doctor = Auth::user();
-    //     $count = $doctor->unreadNotifications()->count();
-    //     return response()->json(['count' => $count]);
-    // }
+        TreatmentPlan::create([
+            'patient_id' => $patient->id,
+            'doctor_id' => Auth::id(),
+            'appointment_id' => $request->appointment_id,
+            'diagnosis_id' => $request->diagnosis_id,
+            'title' => $request->title,
+            'plan' => $request->plan,
+            'start_date' => $request->start_date,
+            'end_date' => $request->end_date,
+        ]);
 
-    // Appointment Notification
-    public function Notifications(){
+        return back()->with('success', 'Treatment plan created.');
+    }
+
+    public function StoreLabRequest(Request $request, $patientId)
+    {
+        $patient = Patient::findOrFail($patientId);
+        $this->authorize('view', $patient);
+
+        $request->validate([
+            'appointment_id' => ['nullable', 'exists:appointments,id'],
+            'test_name' => ['required', 'string', 'max:255'],
+            'instructions' => ['nullable', 'string'],
+        ]);
+
+        LabRequest::create([
+            'patient_id' => $patient->id,
+            'doctor_id' => Auth::id(),
+            'appointment_id' => $request->appointment_id,
+            'test_name' => $request->test_name,
+            'instructions' => $request->instructions,
+        ]);
+
+        return back()->with('success', 'Laboratory test requested.');
+    }
+
+    public function Notifications()
+    {
         $doctor = Auth::user();
         $notifications = $doctor->unreadNotifications;
+
         return view('backend.doctor.notification.notification', compact('notifications'));
     }
-    // End Appointment Notification
 
-    // Accept Appointment
-    public function AcceptAppointment($id){
-        $appointment = Appointment::findOrFail($id);
+    public function AcceptAppointment($id)
+    {
+        $appointment = Appointment::where('doctor_id', Auth::id())->findOrFail($id);
         $appointment->update(['status' => 'confirmed']);
-
         auth()->user()->unreadNotifications()->where('data->appointment_id', $id)->delete();
 
         return response()->json(['success' => true]);
     }
-    // End Accept Appointment
 
-    //  Ignore Appointment
-    public function IgnoreAppointment($id){
-        $appointment = Appointment::findOrFail($id);
+    public function IgnoreAppointment($id)
+    {
+        $appointment = Appointment::where('doctor_id', Auth::id())->findOrFail($id);
         $appointment->update(['status' => 'canceled']);
-
         auth()->user()->unreadNotifications()->where('data->appointment_id', $id)->delete();
 
         return response()->json(['success' => true]);
     }
-    // End Ignore Appointments
 
-    // Number of Appointments
-    public function appointmentCount(){
-        $doctor = Auth::user();
-        $count = $doctor->unreadNotifications()->count();
+    public function appointmentCount()
+    {
+        $count = auth()->user()->unreadNotifications()->count();
+
         return response()->json(['count' => $count]);
     }
-    // End Number of Appointments
 
-    // Appointments Data
-    public function AppointmentsData(){
-        $doctor = Auth::user();
-        $appointments = Appointment::where('doctor_id', $doctor->id)
-                                ->whereIn('status', ['confirmed', 'canceled'])
-                                ->with(['patient', 'creator'])
-                                ->orderBy('appointment_date', 'desc')
-                                ->get();
+    public function AppointmentsData()
+    {
+        $appointments = Appointment::where('doctor_id', Auth::id())
+            ->whereIn('status', ['confirmed', 'canceled'])
+            ->with(['patient', 'creator'])
+            ->orderBy('appointment_date', 'desc')
+            ->get();
+
         return response()->json($appointments);
     }
-    // End Appointments Data
 
-    // All Doctor Appointment
-    public function AllDoctorAppointment(){
-        $appointments = Appointment::where('status', 'confirmed') // یا هر شرطی که می‌خوای
-        ->with(['patient', 'doctor', 'creator'])
-        ->orderBy('appointment_date', 'desc')
-        ->get();
+    public function AllDoctorAppointment()
+    {
+        $appointments = Appointment::where('doctor_id', Auth::id())
+            ->with(['patient', 'doctor', 'creator'])
+            ->orderBy('appointment_date', 'desc')
+            ->get();
 
-        return view('backend.doctor.appointment.index',  compact('appointments'));
+        return view('backend.doctor.appointment.index', compact('appointments'));
     }
-    // End All Doctor Appointment
 
-    // Add Doctor Appointment
-    public function AddDoctorAppointment() {
+    public function AddDoctorAppointment()
+    {
         return view('backend.doctor.appointment.add');
     }
 }

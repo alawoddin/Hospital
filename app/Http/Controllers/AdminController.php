@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Patient;
 use App\Models\Appointment;
+use App\Models\Bill;
+use App\Models\Department;
+use App\Models\Patient;
+use App\Models\Payment;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -15,7 +18,16 @@ class AdminController extends Controller
 {
     public function AdminDashboard() {
         $totalPatients = Patient::count();
-         return view('backend.admin.index', compact('totalPatients'));
+        $totalDoctors = User::where('role', 'doctor')->count();
+        $totalRevenue = Payment::sum('amount');
+        $totalAppointments = Appointment::count();
+
+         return view('backend.admin.index', compact(
+            'totalPatients',
+            'totalDoctors',
+            'totalRevenue',
+            'totalAppointments'
+         ));
     }
 
     //Logout Route
@@ -215,7 +227,7 @@ class AdminController extends Controller
     // Store Admin Appointments
     public function StoreAdminAppointments(Request $request){
         $request->validate([
-            'patient_id' => 'required|exists:users,id',
+            'patient_id' => 'required|exists:patients,id',
             'doctor_id' => 'required|exists:users,id',
             'appointment_date' => 'required|date',
             'appointment_time' => 'required',
@@ -293,6 +305,61 @@ class AdminController extends Controller
         Appointment::findOrFail($id)->delete();
         return redirect()->route('all.admin.appointments');
     }
-    // End Update Appointments
 
+    public function AllDepartments()
+    {
+        $departments = Department::latest()->get();
+
+        return view('backend.admin.departments.index', compact('departments'));
+    }
+
+    public function AddDepartment()
+    {
+        return view('backend.admin.departments.add');
+    }
+
+    public function StoreDepartment(Request $request)
+    {
+        $request->validate([
+            'name' => ['required', 'string', 'max:255', 'unique:departments,name'],
+            'description' => ['nullable', 'string'],
+        ]);
+
+        Department::create($request->only('name', 'description'));
+
+        return redirect()->route('admin.departments')->with('success', 'Department created.');
+    }
+
+    public function EditDepartment($id)
+    {
+        $department = Department::findOrFail($id);
+
+        return view('backend.admin.departments.edit', compact('department'));
+    }
+
+    public function UpdateDepartment(Request $request)
+    {
+        $department = Department::findOrFail($request->id);
+
+        $request->validate([
+            'name' => ['required', 'string', 'max:255', 'unique:departments,name,'.$department->id],
+            'description' => ['nullable', 'string'],
+            'is_active' => ['nullable', 'boolean'],
+        ]);
+
+        $department->update([
+            'name' => $request->name,
+            'description' => $request->description,
+            'is_active' => $request->boolean('is_active', true),
+        ]);
+
+        return redirect()->route('admin.departments')->with('success', 'Department updated.');
+    }
+
+    public function DeleteDepartment($id)
+    {
+        Department::findOrFail($id)->delete();
+
+        return redirect()->route('admin.departments')->with('success', 'Department deleted.');
+    }
 }
