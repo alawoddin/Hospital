@@ -32,6 +32,8 @@
                                     <option value="recieption">Reception</option>
                                     <option value="finance">Finance</option>
                                     <option value="pharmacy">Pharmacy</option>
+                                    <option value="laboratory">Laboratory</option>
+                                    <option value="radiology">Radiology</option>
                                     <option value="user">Patient (User)</option>
                             </select>
                         </div>

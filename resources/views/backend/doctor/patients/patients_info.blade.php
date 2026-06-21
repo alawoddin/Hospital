@@ -96,19 +96,57 @@
         </div>
 
         <div class="card mb-4">
-            <div class="card-header"><h5>Lab Request</h5></div>
+            <div class="card-header"><h5>Request Laboratory Test</h5></div>
             <div class="card-body">
                 <form action="{{ route('doctor.store.lab_request', $patient->id) }}" method="POST" class="row">
                     @csrf
-                    <div class="col-md-6 mb-2"><input type="text" name="test_name" class="form-control" placeholder="Test name" required></div>
+                    <div class="col-md-4 mb-2">
+                        <select name="test_key" class="form-control" required>
+                            <option value="">Select test</option>
+                            @foreach($laboratoryTests as $key => $test)
+                                <option value="{{ $key }}">{{ $test['name'] }} — ${{ number_format($test['fee'], 2) }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <select name="appointment_id" class="form-control">
+                            <option value="">Appointment (optional)</option>
+                            @foreach($appointments as $appt)<option value="{{ $appt->id }}">{{ $appt->appointment_date }}</option>@endforeach
+                        </select>
+                    </div>
                     <div class="col-12 mb-2"><textarea name="instructions" class="form-control" placeholder="Instructions"></textarea></div>
-                    <div class="col-12"><button class="btn btn-primary">Request Test</button></div>
+                    <div class="col-12"><button class="btn btn-primary">Send To Laboratory</button></div>
                 </form>
             </div>
         </div>
 
         <div class="card mb-4">
-            <div class="card-header"><h5>Prescription</h5></div>
+            <div class="card-header"><h5>Request Radiology Scan</h5></div>
+            <div class="card-body">
+                <form action="{{ route('doctor.store.radiology_request', $patient->id) }}" method="POST" class="row">
+                    @csrf
+                    <div class="col-md-4 mb-2">
+                        <select name="scan_key" class="form-control" required>
+                            <option value="">Select scan</option>
+                            @foreach($radiologyScans as $key => $scan)
+                                <option value="{{ $key }}">{{ $scan['name'] }} — ${{ number_format($scan['fee'], 2) }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-2">
+                        <select name="appointment_id" class="form-control">
+                            <option value="">Appointment (optional)</option>
+                            @foreach($appointments as $appt)<option value="{{ $appt->id }}">{{ $appt->appointment_date }}</option>@endforeach
+                        </select>
+                    </div>
+                    <div class="col-12 mb-2"><textarea name="instructions" class="form-control" placeholder="Instructions"></textarea></div>
+                    <div class="col-12"><button class="btn btn-warning">Send To Radiology</button></div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header"><h5>Prescription — Send To Pharmacy</h5></div>
             <div class="card-body">
                 <form action="{{ route('doctor.store.prescription') }}" method="POST">
                     @csrf
@@ -135,15 +173,23 @@
                     </div>
                     <div id="medicineWrapper">
                         <div class="row medicine-row mb-2">
-                            <div class="col-md-3"><input type="text" name="medicine[]" class="form-control" placeholder="Medicine" required></div>
+                            <div class="col-md-3">
+                                <select name="medicine_id[]" class="form-control">
+                                    <option value="">Medicine from inventory</option>
+                                    @foreach($medicines ?? [] as $med)
+                                        <option value="{{ $med->id }}">{{ $med->name }} (${{ number_format($med->unit_price, 2) }})</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-2"><input type="text" name="medicine[]" class="form-control" placeholder="Medicine name" required></div>
                             <div class="col-md-2"><input type="text" name="dosage[]" class="form-control" placeholder="Dosage"></div>
-                            <div class="col-md-2"><input type="text" name="frequency[]" class="form-control" placeholder="Frequency"></div>
-                            <div class="col-md-2"><input type="number" name="quantity[]" class="form-control" value="1" min="1"></div>
-                            <div class="col-md-3"><textarea name="desc[]" class="form-control" placeholder="Notes"></textarea></div>
+                            <div class="col-md-2"><input type="text" name="frequency[]" class="form-control" placeholder="Duration/Frequency"></div>
+                            <div class="col-md-1"><input type="number" name="quantity[]" class="form-control" value="1" min="1"></div>
+                            <div class="col-md-2"><textarea name="desc[]" class="form-control" placeholder="Instructions"></textarea></div>
                         </div>
                     </div>
                     <button type="button" class="btn btn-sm btn-secondary" id="addBtn">Add Medicine</button>
-                    <button type="submit" class="btn btn-success mt-3">Submit Prescription</button>
+                    <button type="submit" class="btn btn-success mt-3">Send To Pharmacy</button>
                 </form>
             </div>
         </div>

@@ -5,8 +5,11 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreBillRequest;
 use App\Http\Requests\StorePaymentRequest;
 use App\Models\Bill;
+use App\Models\Expense;
 use App\Models\Patient;
 use App\Models\Payment;
+use App\Models\Salary;
+use App\Services\HospitalBillingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -15,13 +18,16 @@ use Intervention\Image\ImageManager;
 
 class FinanceController extends Controller
 {
-    public function FinanceDashboard()
+    public function FinanceDashboard(HospitalBillingService $billingService)
     {
-        $totalPayments = Payment::sum('amount');
+        $today = $billingService->financeStats('today');
+        $month = $billingService->financeStats('month');
+        $year = $billingService->financeStats('year');
+
         $pendingInvoices = Bill::whereIn('status', ['pending', 'partially_paid'])->count();
         $totalDue = Bill::whereIn('status', ['pending', 'partially_paid'])->sum('due_amount');
 
-        return view('backend.finance.index', compact('totalPayments', 'pendingInvoices', 'totalDue'));
+        return view('backend.finance.index', compact('today', 'month', 'year', 'pendingInvoices', 'totalDue'));
     }
 
     public function FinanceLogout(Request $request)
@@ -183,6 +189,87 @@ class FinanceController extends Controller
 
     public function expensesIndex()
     {
-        return view('backend.finance.expenses.index');
+        $expenses = Expense::latest()->paginate(20);
+
+        return view('backend.finance.expenses.index', compact('expenses'));
+    }
+
+    public function AddExpense()
+    {
+        return view('backend.finance.expenses.add');
+    }
+
+    public function StoreExpense(Request $request)
+    {
+        $request->validate([
+            'category' => ['required', 'string', 'max:100'],
+            'title' => ['required', 'string', 'max:255'],
+            'amount' => ['required', 'numeric', 'min:0'],
+            'expense_date' => ['required', 'date'],
+            'description' => ['nullable', 'string'],
+        ]);
+
+        Expense::create([
+            'category' => $request->category,
+            'title' => $request->title,
+            'description' => $request->description,
+            'amount' => $request->amount,
+            'expense_date' => $request->expense_date,
+            'status' => 'pending',
+            'created_by' => Auth::id(),
+        ]);
+
+        return redirect()->route('finance.expenses')->with('success', 'Expense recorded.');
+    }
+
+    public function ApproveExpense($id)
+    {
+        Expense::findOrFail($id)->update(['status' => 'approved', 'approved_by' => Auth::id()]);
+
+        return back()->with('success', 'Expense approved.');
+    }
+
+    public function PayExpense($id)
+    {
+        Expense::findOrFail($id)->update([
+            'status' => 'paid',
+            'payment_date' => now()->toDateString(),
+            'approved_by' => Auth::id(),
+        ]);
+
+        return back()->with('success', 'Expense marked as paid.');
+    }
+
+    public function SalariesIndex()
+    {
+        $salaries = Salary::with('employee')->latest()->paginate(20);
+
+        return view('backend.finance.salaries.index', compact('salaries'));
+    }
+
+    public function ApproveSalary($id)
+    {
+        Salary::findOrFail($id)->update(['status' => 'approved', 'approved_by' => Auth::id()]);
+
+        return back()->with('success', 'Salary approved.');
+    }
+
+    public function PaySalary($id)
+    {
+        $salary = Salary::findOrFail($id);
+        $salary->update([
+            'status' => 'paid',
+            'payment_date' => now()->toDateString(),
+            'approved_by' => Auth::id(),
+        ]);
+
+        $salary->employee?->notify(new \App\Notifications\WorkflowNotification([
+            'type' => 'salary_paid',
+            'amount' => $salary->amount,
+            'month' => $salary->month,
+            'message' => 'Salary paid for '.$salary->month.': $'.number_format($salary->amount, 2),
+        ]));
+
+        return back()->with('success', 'Salary paid.');
     }
 }

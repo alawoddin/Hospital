@@ -74,6 +74,16 @@ class User extends Authenticatable
         return $this->role === 'pharmacy';
     }
 
+    public function isLaboratory(): bool
+    {
+        return $this->role === 'laboratory';
+    }
+
+    public function isRadiology(): bool
+    {
+        return $this->role === 'radiology';
+    }
+
     public function isPatient(): bool
     {
         return $this->role === 'user';

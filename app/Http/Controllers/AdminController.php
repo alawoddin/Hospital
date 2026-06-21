@@ -9,6 +9,7 @@ use App\Models\Patient;
 use App\Models\DoctorConsultation;
 use App\Models\FeeType;
 use App\Models\Payment;
+use App\Models\Salary;
 use App\Services\HospitalBillingService;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -459,6 +460,35 @@ class AdminController extends Controller
             'from', 'to', 'totalPatients', 'registrationFees', 'totalAppointments',
             'checkedInPatients', 'consultationFees', 'totalRevenue', 'pendingBills', 'doctors'
         ));
+    }
+
+    public function SalariesIndex()
+    {
+        $salaries = Salary::with('employee')->latest()->paginate(20);
+        $employees = User::whereNotIn('role', ['user'])->orderBy('name')->get();
+
+        return view('backend.admin.salaries.index', compact('salaries', 'employees'));
+    }
+
+    public function StoreSalary(Request $request)
+    {
+        $request->validate([
+            'employee_id' => ['required', 'exists:users,id'],
+            'month' => ['required', 'string', 'max:20'],
+            'amount' => ['required', 'numeric', 'min:0'],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        Salary::create([
+            'employee_id' => $request->employee_id,
+            'month' => $request->month,
+            'amount' => $request->amount,
+            'notes' => $request->notes,
+            'status' => 'pending',
+            'created_by' => auth()->id(),
+        ]);
+
+        return back()->with('success', 'Salary record created. Finance will approve and pay.');
     }
 
     private function userPayload(Request $request): array

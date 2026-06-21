@@ -56,7 +56,7 @@
         <div class="col-md-3"><div class="card p-3"><h6>Assigned Patients</h6><h3>{{ $assignedPatients }}</h3></div></div>
         <div class="col-md-3"><div class="card p-3"><h6>Today's Appointments</h6><h3>{{ $todayAppointments }}</h3></div></div>
         <div class="col-md-3"><div class="card p-3"><h6>Checked Today</h6><h3>{{ $stats['today_consultations'] }}</h3></div></div>
-        <div class="col-md-3"><div class="card p-3"><h6>Your Fee Per Patient</h6><h3>${{ number_format($stats['consultation_fee'], 2) }}</h3></div></div>
+        <div class="col-md-3"><div class="card p-3"><h6>Pending Patients</h6><h3>{{ $stats['pending_patients'] ?? 0 }}</h3></div></div>
     </div>
 
     <div class="row">

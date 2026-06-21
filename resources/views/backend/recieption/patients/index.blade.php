@@ -29,6 +29,7 @@
                                     <th>Photo</th>
                                     <th>Created at</th>
                                     <th>Edit</th>
+                                    <th>Bill</th>
                                     <th>Delete</th>
                                 </tr>
                             </thead>
@@ -50,6 +51,7 @@
                                         <td><img src="{{ asset($item->photo) }}" alt="" style="width: 50px; height: 50px;"></td>
                                         <td>{{ $item->created_at }}</td>
                                         <td><a href="{{ route('edit.patients', $item->id) }}" class="btn btn-info">Edit</a></td>
+                                        <td><a href="{{ route('recieption.patient.summary', $item->id) }}" class="btn btn-success btn-sm">Bill</a></td>
                                         <td><a href="{{ route('delete.patients', $item->id) }}" class="btn btn-danger">Delete</a></td>
                                     </tr>
                                 @endforeach

@@ -3,8 +3,10 @@
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\DoctorController;
 use App\Http\Controllers\FinanceController;
+use App\Http\Controllers\LaboratoryController;
 use App\Http\Controllers\PharmacyController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\RadiologyController;
 use App\Http\Controllers\RecieptionController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
@@ -18,6 +20,8 @@ Route::get('/dashboard', function () {
         'recieption' => redirect()->route('recieption.dashboard'),
         'finance' => redirect()->route('finance.dashboard'),
         'pharmacy' => redirect()->route('pharmacy.dashboard'),
+        'laboratory' => redirect()->route('laboratory.dashboard'),
+        'radiology' => redirect()->route('radiology.dashboard'),
         default => redirect()->route('user.dashboard'),
     };
 })->middleware(['auth', 'verified'])->name('dashboard');
@@ -69,13 +73,8 @@ Route::middleware('auth', 'role:admin')->group(function () {
         Route::get('/admin/departments/delete/{id}', 'DeleteDepartment')->name('admin.departments.delete');
 
         Route::get('/admin/reports', 'Reports')->name('admin.reports');
-
-        Route::get('/admin/fees', 'AllFeeTypes')->name('admin.fees');
-        Route::get('/admin/fees/add', 'AddFeeType')->name('admin.fees.add');
-        Route::post('/admin/fees/store', 'StoreFeeType')->name('admin.fees.store');
-        Route::get('/admin/fees/edit/{id}', 'EditFeeType')->name('admin.fees.edit');
-        Route::post('/admin/fees/update', 'UpdateFeeType')->name('admin.fees.update');
-        Route::get('/admin/fees/delete/{id}', 'DeleteFeeType')->name('admin.fees.delete');
+        Route::get('/admin/salaries', 'SalariesIndex')->name('admin.salaries');
+        Route::post('/admin/salaries/store', 'StoreSalary')->name('admin.salaries.store');
     });
 });
 
@@ -94,6 +93,7 @@ Route::middleware('auth', 'role:doctor')->group(function () {
         Route::post('/doctor/patients/{id}/medical-note', 'StoreMedicalNote')->name('doctor.store.medical_note');
         Route::post('/doctor/patients/{id}/treatment-plan', 'StoreTreatmentPlan')->name('doctor.store.treatment_plan');
         Route::post('/doctor/patients/{id}/lab-request', 'StoreLabRequest')->name('doctor.store.lab_request');
+        Route::post('/doctor/patients/{id}/radiology-request', 'StoreRadiologyRequest')->name('doctor.store.radiology_request');
 
         Route::get('/doctor/notifications', 'Notifications')->name('doctor.notifications');
         Route::get('/doctor/notifications/{id}/read', 'MarkNotificationRead')->name('doctor.notifications.read');
@@ -131,6 +131,10 @@ Route::middleware('auth', 'role:recieption')->group(function () {
         Route::get('/appointment/{id}/check-in', 'CheckInForm')->name('appointment.checkin.form');
         Route::get('/appointment/{id}/slip', 'PrintAppointmentSlip')->name('appointment.slip');
         Route::get('/doctor/schedules', 'DoctorSchedules')->name('recieption.schedules');
+
+        Route::get('/recieption/payments', 'PendingPayments')->name('recieption.payments');
+        Route::get('/recieption/patient/{id}/summary', 'PatientFinancialSummary')->name('recieption.patient.summary');
+        Route::post('/recieption/bill/{id}/pay', 'MarkBillPaid')->name('recieption.bill.pay');
     });
 });
 
@@ -150,6 +154,13 @@ Route::middleware('auth', 'role:finance')->group(function () {
         Route::get('/payments/add', 'AddPayment')->name('finance.payments.add');
         Route::post('/payments/store', 'StorePayment')->name('finance.payments.store');
         Route::get('/expenses', 'expensesIndex')->name('finance.expenses');
+        Route::get('/expenses/add', 'AddExpense')->name('finance.expenses.add');
+        Route::post('/expenses/store', 'StoreExpense')->name('finance.expenses.store');
+        Route::post('/expenses/{id}/approve', 'ApproveExpense')->name('finance.expenses.approve');
+        Route::post('/expenses/{id}/pay', 'PayExpense')->name('finance.expenses.pay');
+        Route::get('/finance/salaries', 'SalariesIndex')->name('finance.salaries');
+        Route::post('/finance/salaries/{id}/approve', 'ApproveSalary')->name('finance.salaries.approve');
+        Route::post('/finance/salaries/{id}/pay', 'PaySalary')->name('finance.salaries.pay');
     });
 });
 
@@ -199,6 +210,30 @@ Route::middleware('auth', 'role:pharmacy')->group(function () {
         Route::get('/all/expires/medicine', 'AllExpiresMedicine')->name('all.expires.medicine');
         Route::get('/edit/expires/medicine/{id}', 'EditExpiresMedicine')->name('edit.expires.medicine');
         Route::post('/update/expires/medicine', 'UpdateExpiresMedicine')->name('update.expires.medicine');
+    });
+});
+
+Route::middleware('auth', 'role:laboratory')->group(function () {
+    Route::controller(LaboratoryController::class)->group(function () {
+        Route::get('/laboratory/dashboard', 'LaboratoryDashboard')->name('laboratory.dashboard');
+        Route::get('/laboratory/logout', 'LaboratoryLogout')->name('laboratory.logout');
+        Route::get('/laboratory/profile', 'LaboratoryProfile')->name('laboratory.profile');
+        Route::post('/update/laboratory/profile', 'UpdateLaboratoryProfile')->name('update.laboratory.profile');
+        Route::get('/laboratory/requests', 'LabRequests')->name('laboratory.requests');
+        Route::post('/laboratory/requests/{id}/process', 'ProcessLabRequest')->name('laboratory.requests.process');
+        Route::post('/laboratory/requests/{id}/complete', 'CompleteLabRequest')->name('laboratory.requests.complete');
+    });
+});
+
+Route::middleware('auth', 'role:radiology')->group(function () {
+    Route::controller(RadiologyController::class)->group(function () {
+        Route::get('/radiology/dashboard', 'RadiologyDashboard')->name('radiology.dashboard');
+        Route::get('/radiology/logout', 'RadiologyLogout')->name('radiology.logout');
+        Route::get('/radiology/profile', 'RadiologyProfile')->name('radiology.profile');
+        Route::post('/update/radiology/profile', 'UpdateRadiologyProfile')->name('update.radiology.profile');
+        Route::get('/radiology/requests', 'RadiologyRequests')->name('radiology.requests');
+        Route::post('/radiology/requests/{id}/process', 'ProcessRadiologyRequest')->name('radiology.requests.process');
+        Route::post('/radiology/requests/{id}/complete', 'CompleteRadiologyRequest')->name('radiology.requests.complete');
     });
 });
 

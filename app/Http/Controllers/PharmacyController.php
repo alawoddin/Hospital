@@ -10,6 +10,9 @@ use App\Models\Prescription;
 use App\Models\PrescriptionItem;
 use App\Models\Product;
 use App\Models\Supplier;
+use App\Models\User;
+use App\Notifications\WorkflowNotification;
+use App\Services\HospitalBillingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -24,10 +27,19 @@ class PharmacyController extends Controller
             ->whereDate('expiry_date', '<=', now()->addDays(30))
             ->count();
         $pendingPrescriptions = Prescription::where('pharmacy_id', Auth::id())
-            ->where('status', 'pending')
+            ->whereIn('status', ['pending', 'partially_dispensed'])
             ->count();
+        $soldToday = Prescription::where('pharmacy_id', Auth::id())->where('status', 'dispensed')->whereDate('updated_at', today())->count();
+        $soldMonth = Prescription::where('pharmacy_id', Auth::id())->where('status', 'dispensed')
+            ->whereBetween('updated_at', [now()->startOfMonth(), now()->endOfMonth()])->count();
+        $soldYear = Prescription::where('pharmacy_id', Auth::id())->where('status', 'dispensed')
+            ->whereBetween('updated_at', [now()->startOfYear(), now()->endOfYear()])->count();
+        $lowStock = Medicine::with('stocks')->get()->filter(fn ($m) => $m->totalStock() <= 10)->count();
 
-        return view('backend.pharmacy.index', compact('medicineStock', 'expiringMedicines', 'pendingPrescriptions'));
+        return view('backend.pharmacy.index', compact(
+            'medicineStock', 'expiringMedicines', 'pendingPrescriptions',
+            'soldToday', 'soldMonth', 'soldYear', 'lowStock'
+        ));
     }
 
 
@@ -485,18 +497,24 @@ class PharmacyController extends Controller
         return back()->with('success', 'Category created.');
     }
 
-    public function DispensePrescription(Request $request, $id)
+    public function DispensePrescription(Request $request, $id, HospitalBillingService $billingService)
     {
-        $prescription = Prescription::with('items')->where('pharmacy_id', Auth::id())->findOrFail($id);
+        $prescription = Prescription::with(['items', 'patient', 'appointment'])->where('pharmacy_id', Auth::id())->findOrFail($id);
         $this->authorize('dispense', $prescription);
 
-        DB::transaction(function () use ($prescription) {
+        $totalAmount = 0;
+
+        DB::transaction(function () use ($prescription, &$totalAmount) {
             foreach ($prescription->items as $item) {
                 if ($item->dispensed) {
                     continue;
                 }
 
                 if ($item->medicine_id) {
+                    $medicine = Medicine::find($item->medicine_id);
+                    $unitPrice = (float) ($medicine?->unit_price ?? 0);
+                    $totalAmount += $unitPrice * (int) $item->quantity;
+
                     $remaining = $item->quantity;
                     $stocks = MedicineStock::where('medicine_id', $item->medicine_id)
                         ->where('quantity', '>', 0)
@@ -522,13 +540,25 @@ class PharmacyController extends Controller
                 $item->update(['dispensed' => true]);
             }
 
-            $allDispensed = $prescription->items()->where('dispensed', false)->doesntExist();
-            $prescription->update([
-                'status' => $allDispensed ? 'dispensed' : 'partially_dispensed',
-            ]);
+            $prescription->update(['status' => 'dispensed']);
         });
 
-        return back()->with('success', 'Prescription dispensed and stock updated.');
+        if ($totalAmount > 0) {
+            $billingService->addPharmacyCharges($prescription, $totalAmount);
+        }
+
+        $payload = [
+            'type' => 'prescription_completed',
+            'prescription_id' => $prescription->id,
+            'patient_id' => $prescription->patient_id,
+            'patient_name' => $prescription->patient->name,
+            'amount' => $totalAmount,
+            'message' => 'Prescription dispensed for '.$prescription->patient->name.' ($'.number_format($totalAmount, 2).')',
+        ];
+
+        User::whereIn('role', ['recieption', 'finance'])->each(fn ($u) => $u->notify(new WorkflowNotification($payload)));
+
+        return back()->with('success', 'Medicines dispensed. Stock deducted. Bill updated ($'.number_format($totalAmount, 2).').');
     }
 
     public function PharmacyReports()

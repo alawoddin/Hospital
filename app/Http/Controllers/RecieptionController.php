@@ -5,11 +5,14 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreAppointmentRequest;
 use App\Http\Requests\StorePatientRequest;
 use App\Models\Appointment;
+use App\Models\Bill;
 use App\Models\Patient;
+use App\Models\Payment;
 use App\Models\User;
 use App\Notifications\AppointmentCreated;
 use App\Notifications\PatientAssignedToDoctor;
 use App\Notifications\PatientCheckedIn;
+use App\Notifications\WorkflowNotification;
 use App\Services\HospitalBillingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -23,8 +26,12 @@ class RecieptionController extends Controller
     {
         $newRegistrations = Patient::whereDate('created_at', today())->count();
         $todayAppointments = Appointment::whereDate('appointment_date', today())->count();
+        $pendingPayments = Bill::where('is_master', true)->whereIn('status', ['pending', 'partially_paid'])->count();
+        $collectedToday = Payment::whereDate('payment_date', today())->sum('amount');
 
-        return view('backend.recieption.index', compact('newRegistrations', 'todayAppointments'));
+        return view('backend.recieption.index', compact(
+            'newRegistrations', 'todayAppointments', 'pendingPayments', 'collectedToday'
+        ));
     }
 
     public function RecieptionLogout(Request $request)
@@ -99,7 +106,7 @@ class RecieptionController extends Controller
 
         app(HospitalBillingService::class)->createRegistrationBill(
             $patient->id,
-            (float) ($request->registration_fee ?? 0),
+            (float) ($request->registration_fee ?? config('hospital.default_registration_fee', 200)),
             'Patient registration'
         );
 
@@ -283,6 +290,51 @@ class RecieptionController extends Controller
         $this->authorize('view', $appointment);
 
         return view('backend.recieption.appointment.slip', compact('appointment'));
+    }
+
+    public function PendingPayments()
+    {
+        $bills = Bill::with('patient')->where('is_master', true)
+            ->whereIn('status', ['pending', 'partially_paid'])
+            ->latest()->paginate(20);
+
+        return view('backend.recieption.payments.index', compact('bills'));
+    }
+
+    public function PatientFinancialSummary($patientId, HospitalBillingService $billingService)
+    {
+        $patient = Patient::findOrFail($patientId);
+        $bill = Bill::where('patient_id', $patient->id)
+            ->where('is_master', true)
+            ->whereNotIn('status', ['paid', 'canceled'])
+            ->latest()
+            ->first();
+
+        if (! $bill) {
+            $bill = $billingService->getMasterBill($patient);
+        }
+
+        $summary = $billingService->financialSummary($bill);
+
+        return view('backend.recieption.payments.summary', compact('patient', 'summary'));
+    }
+
+    public function MarkBillPaid($billId, HospitalBillingService $billingService)
+    {
+        $bill = Bill::with('patient')->where('is_master', true)->findOrFail($billId);
+
+        $payment = $billingService->markBillPaid($bill, Auth::user());
+
+        User::where('role', 'finance')->each(fn ($u) => $u->notify(new WorkflowNotification([
+            'type' => 'payment_received',
+            'bill_id' => $bill->id,
+            'patient_id' => $bill->patient_id,
+            'patient_name' => $bill->patient->name,
+            'amount' => $payment->amount,
+            'message' => 'Payment received: $'.number_format($payment->amount, 2).' from '.$bill->patient->name,
+        ])));
+
+        return back()->with('success', 'Payment collected. Bill marked as paid.');
     }
 
     public function DoctorSchedules()

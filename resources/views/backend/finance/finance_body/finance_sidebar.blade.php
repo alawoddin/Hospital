@@ -9,6 +9,7 @@
             <li><a href="{{ route('finance.payments.add') }}"><span class="nav-text">Record Payment</span></a></li>
             <li><a href="{{ route('income') }}"><span class="nav-text">Financial Reports</span></a></li>
             <li><a href="{{ route('finance.expenses') }}"><span class="nav-text">Expenses</span></a></li>
+            <li><a href="{{ route('finance.salaries') }}"><span class="nav-text">Salaries</span></a></li>
             <li><a href="{{ route('finance.profile') }}"><span class="nav-text">Profile</span></a></li>
         </ul>
     </div>
