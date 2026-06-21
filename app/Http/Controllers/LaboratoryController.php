@@ -80,24 +80,20 @@ class LaboratoryController extends Controller
 
         $billing->completeLabRequest($labRequest, Auth::user(), $request->result, $reportPath);
 
-        $labRequest->patient->bills()->latest()->first()?->patient;
-        $financeUsers = User::where('role', 'finance')->get();
-        $receptionUsers = User::where('role', 'recieption')->get();
+        $labRequest->refresh();
 
         $payload = [
             'type' => 'lab_completed',
+            'lab_request_id' => $labRequest->id,
             'patient_id' => $labRequest->patient_id,
             'patient_name' => $labRequest->patient->name,
             'test_name' => $labRequest->test_name,
-            'message' => 'Lab test completed: '.$labRequest->test_name.' for '.$labRequest->patient->name,
+            'result' => $labRequest->result,
+            'message' => 'Lab result ready: '.$labRequest->test_name.' for '.$labRequest->patient->name.' — please review and confirm.',
         ];
-
-        foreach ($financeUsers->merge($receptionUsers) as $user) {
-            $user->notify(new WorkflowNotification($payload));
-        }
 
         $labRequest->doctor?->notify(new WorkflowNotification($payload));
 
-        return back()->with('success', 'Test completed. Bill updated automatically.');
+        return back()->with('success', 'Test completed. Doctor has been notified to review the result.');
     }
 }

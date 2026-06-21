@@ -535,12 +535,17 @@ class PharmacyController extends Controller
                     if ($remaining > 0) {
                         throw new \RuntimeException('Insufficient stock for '.$item->medicine);
                     }
+                } else {
+                    $totalAmount += 50 * (int) ($item->quantity ?? 1);
                 }
 
                 $item->update(['dispensed' => true]);
             }
 
-            $prescription->update(['status' => 'dispensed']);
+            $prescription->update([
+                'status' => 'dispensed',
+                'dispensed_at' => now(),
+            ]);
         });
 
         if ($totalAmount > 0) {
@@ -548,17 +553,17 @@ class PharmacyController extends Controller
         }
 
         $payload = [
-            'type' => 'prescription_completed',
+            'type' => 'prescription_dispensed',
             'prescription_id' => $prescription->id,
             'patient_id' => $prescription->patient_id,
             'patient_name' => $prescription->patient->name,
             'amount' => $totalAmount,
-            'message' => 'Prescription dispensed for '.$prescription->patient->name.' ($'.number_format($totalAmount, 2).')',
+            'message' => 'Pharmacy dispensed medicines for '.$prescription->patient->name.'. Please review and confirm.',
         ];
 
-        User::whereIn('role', ['recieption', 'finance'])->each(fn ($u) => $u->notify(new WorkflowNotification($payload)));
+        $prescription->doctor?->notify(new WorkflowNotification($payload));
 
-        return back()->with('success', 'Medicines dispensed. Stock deducted. Bill updated ($'.number_format($totalAmount, 2).').');
+        return back()->with('success', 'Medicines dispensed. Doctor notified to review and confirm.');
     }
 
     public function PharmacyReports()

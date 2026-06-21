@@ -81,18 +81,24 @@
     <div class="col-12 pt-3 pb-3 border-bottom mx-auto">
         <div class="card p-3">
             <h2 class="m-2">Prescription:</h2>
-        <table class="table table-hovered table-stripped mt-3">
+        <table class="table table-bordered mt-3">
             <thead>
                 <tr>
-                    <th><h4>Medicine</h4></th>
-                    <th><h4>Description</h4></th>
+                    <th>Medicine</th>
+                    <th>Quantity</th>
+                    <th>Duration</th>
+                    <th>Instructions</th>
+                    <th>Status</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach ($prescription->items as $item)
                     <tr>
-                        <td><span style="color:rgb(19, 120, 167); font-size: 18px;">{{$item->medicine}}</span></td>
-                        <td><span style="color:rgb(19, 120, 167); font-size: 18px;">{{$item->desc}}</span></td>
+                        <td>{{ $item->medicine }}</td>
+                        <td>{{ $item->quantity }}</td>
+                        <td>{{ $item->frequency }}</td>
+                        <td>{{ $item->desc }}</td>
+                        <td>{{ $item->dispensed ? 'Dispensed' : 'Pending' }}</td>
                     </tr>
                 @endforeach
             </tbody>
@@ -101,10 +107,12 @@
         @if($prescription->status !== 'dispensed')
         <form action="{{ route('pharmacy.prescription.dispense', $prescription->id) }}" method="POST" class="mt-3">
             @csrf
-            <button type="submit" class="btn btn-success" onclick="return confirm('Dispense medicines and deduct stock?')">Dispense Prescription</button>
+            <button type="submit" class="btn btn-success btn-lg" onclick="return confirm('Dispense medicines? Doctor will review before reception is notified.')">Dispense Medicines</button>
         </form>
+        @elseif(!$prescription->doctor_confirmed_at)
+        <p class="text-info mt-3">Dispensed — waiting for doctor to confirm, then reception will be notified.</p>
         @else
-        <p class="text-success mt-3">Prescription dispensed.</p>
+        <p class="text-success mt-3">Dispensed and confirmed by doctor. Sent to reception.</p>
         @endif
     </div>
 </div>

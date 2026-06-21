@@ -10,6 +10,14 @@ class Prescription extends Model
 {
     protected $guarded = [];
 
+    protected function casts(): array
+    {
+        return [
+            'doctor_confirmed_at' => 'datetime',
+            'dispensed_at' => 'datetime',
+        ];
+    }
+
     public function doctor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'doctor_id');

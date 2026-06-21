@@ -457,11 +457,13 @@ class HospitalBillingService
             'patient_assigned', 'patient_checked_in' => isset($data['patient_id'])
                 ? route('patients.info', $data['patient_id']) : route('doctor.patients'),
             'appointment_created' => route('all.doctor.appointment'),
+            'lab_completed', 'lab_confirmed_for_reception' => isset($data['patient_id'])
+                ? route('patients.info', $data['patient_id']) : route('doctor.patients'),
+            'prescription_dispensed', 'prescription_confirmed_for_reception' => isset($data['patient_id'])
+                ? route('patients.info', $data['patient_id']) : route('doctor.patients'),
             'prescription_sent' => route('pharmacy.patients'),
             'prescription_completed' => route('pharmacy.patients'),
             'lab_requested' => route('laboratory.requests'),
-            'lab_completed' => isset($data['patient_id']) ? route('recieption.patient.summary', $data['patient_id']) : route('laboratory.requests'),
-            'radiology_requested' => route('radiology.requests'),
             'invoice_generated', 'payment_received' => route('recieption.payments'),
             'salary_paid' => route('finance.salaries'),
             default => route('doctor.dashboard'),

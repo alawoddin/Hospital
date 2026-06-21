@@ -94,6 +94,8 @@ Route::middleware('auth', 'role:doctor')->group(function () {
         Route::post('/doctor/patients/{id}/treatment-plan', 'StoreTreatmentPlan')->name('doctor.store.treatment_plan');
         Route::post('/doctor/patients/{id}/lab-request', 'StoreLabRequest')->name('doctor.store.lab_request');
         Route::post('/doctor/patients/{id}/radiology-request', 'StoreRadiologyRequest')->name('doctor.store.radiology_request');
+        Route::post('/doctor/lab-request/{id}/confirm', 'ConfirmLabResult')->name('doctor.lab.confirm');
+        Route::post('/doctor/prescription/{id}/confirm', 'ConfirmPrescription')->name('doctor.prescription.confirm');
 
         Route::get('/doctor/notifications', 'Notifications')->name('doctor.notifications');
         Route::get('/doctor/notifications/{id}/read', 'MarkNotificationRead')->name('doctor.notifications.read');

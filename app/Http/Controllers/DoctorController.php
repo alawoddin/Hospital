@@ -139,10 +139,82 @@ class DoctorController extends Controller
         $laboratoryTests = $billingService->laboratoryTests();
         $radiologyScans = $billingService->radiologyScans();
 
+        $pendingLabReviews = LabRequest::where('doctor_id', Auth::id())
+            ->where('patient_id', $patient->id)
+            ->where('status', 'completed')
+            ->whereNull('doctor_confirmed_at')
+            ->latest()
+            ->get();
+
+        $pendingPrescriptionReviews = Prescription::with('items')
+            ->where('doctor_id', Auth::id())
+            ->where('patient_id', $patient->id)
+            ->where('status', 'dispensed')
+            ->whereNull('doctor_confirmed_at')
+            ->latest()
+            ->get();
+
         return view('backend.doctor.patients.patients_info', compact(
             'patient', 'pharmacies', 'medicines', 'appointments', 'consultations',
-            'alreadyConsultedToday', 'laboratoryTests', 'radiologyScans'
+            'alreadyConsultedToday', 'laboratoryTests', 'radiologyScans',
+            'pendingLabReviews', 'pendingPrescriptionReviews'
         ));
+    }
+
+    public function ConfirmLabResult($labRequestId)
+    {
+        $labRequest = LabRequest::where('doctor_id', Auth::id())->findOrFail($labRequestId);
+
+        if ($labRequest->status !== 'completed') {
+            return back()->with('error', 'Lab test is not completed yet.');
+        }
+
+        if ($labRequest->doctor_confirmed_at) {
+            return back()->with('info', 'Lab result already confirmed.');
+        }
+
+        $labRequest->update(['doctor_confirmed_at' => now()]);
+
+        $payload = [
+            'type' => 'lab_confirmed_for_reception',
+            'patient_id' => $labRequest->patient_id,
+            'patient_name' => $labRequest->patient->name,
+            'test_name' => $labRequest->test_name,
+            'message' => 'Doctor confirmed lab result: '.$labRequest->test_name.' for '.$labRequest->patient->name,
+        ];
+
+        User::whereIn('role', ['recieption', 'finance'])->each(fn ($u) => $u->notify(new WorkflowNotification($payload)));
+
+        return back()->with('success', 'Lab result confirmed and sent to reception.');
+    }
+
+    public function ConfirmPrescription($prescriptionId)
+    {
+        $prescription = Prescription::with('patient')
+            ->where('doctor_id', Auth::id())
+            ->findOrFail($prescriptionId);
+
+        if ($prescription->status !== 'dispensed') {
+            return back()->with('error', 'Pharmacy has not dispensed this prescription yet.');
+        }
+
+        if ($prescription->doctor_confirmed_at) {
+            return back()->with('info', 'Prescription already confirmed.');
+        }
+
+        $prescription->update(['doctor_confirmed_at' => now()]);
+
+        $payload = [
+            'type' => 'prescription_confirmed_for_reception',
+            'prescription_id' => $prescription->id,
+            'patient_id' => $prescription->patient_id,
+            'patient_name' => $prescription->patient->name,
+            'message' => 'Doctor confirmed pharmacy for '.$prescription->patient->name.' — ready for patient bill/payment.',
+        ];
+
+        User::whereIn('role', ['recieption', 'finance'])->each(fn ($u) => $u->notify(new WorkflowNotification($payload)));
+
+        return back()->with('success', 'Prescription confirmed and sent to reception.');
     }
 
     public function CompleteConsultation(Request $request, $patientId, HospitalBillingService $billingService)
@@ -386,6 +458,8 @@ class DoctorController extends Controller
         $message = match ($data['type'] ?? '') {
             'patient_assigned' => 'Opening assigned patient record.',
             'patient_checked_in' => 'Opening checked-in patient record.',
+            'lab_completed' => 'Lab result ready — please review and confirm.',
+            'prescription_dispensed' => 'Pharmacy dispensed medicines — please review and confirm.',
             'appointment_created' => 'Opening your appointments list.',
             default => 'Notification marked as read.',
         };
