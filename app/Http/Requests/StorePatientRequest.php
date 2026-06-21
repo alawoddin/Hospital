@@ -27,6 +27,7 @@ class StorePatientRequest extends FormRequest
             'email' => ['nullable', 'email', 'max:255'],
             'address' => ['nullable', 'string', 'max:500'],
             'national_id' => ['nullable', 'string', 'max:100'],
+            'registration_fee' => ['nullable', 'numeric', 'min:0'],
             'photo' => ['nullable', 'image', 'max:2048'],
         ];
     }

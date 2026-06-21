@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StorePrescriptionRequest;
 use App\Models\Appointment;
+use App\Models\DoctorConsultation;
 use App\Models\Diagnosis;
 use App\Models\LabRequest;
 use App\Models\MedicalNote;
@@ -11,7 +12,7 @@ use App\Models\Patient;
 use App\Models\Prescription;
 use App\Models\PrescriptionItem;
 use App\Models\TreatmentPlan;
-use App\Models\User;
+use App\Services\HospitalBillingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -20,18 +21,31 @@ use Intervention\Image\ImageManager;
 
 class DoctorController extends Controller
 {
-    public function DoctorDashboard()
+    public function DoctorDashboard(HospitalBillingService $billingService)
     {
         $doctor = Auth::user();
-        $todayAppointments = Appointment::where('doctor_id', $doctor->id)
-            ->whereDate('appointment_date', today())
-            ->where('status', 'confirmed')
-            ->count();
-        $assignedPatients = Patient::where('doctor_id', $doctor->id)
-            ->orWhere('doctor', $doctor->name)
-            ->count();
+        $stats = $billingService->doctorMonthlyStats($doctor);
 
-        return view('backend.doctor.index', compact('todayAppointments', 'assignedPatients'));
+        $assignedPatients = $stats['total_assigned_patients'];
+        $todayAppointments = $stats['today_appointments'];
+
+        $recentConsultations = DoctorConsultation::with('patient')
+            ->where('doctor_id', $doctor->id)
+            ->latest('visited_at')
+            ->take(5)
+            ->get();
+
+        $recentNotifications = $doctor->unreadNotifications()->latest()->take(5)->get();
+        $notificationCount = $doctor->unreadNotifications()->count();
+
+        return view('backend.doctor.index', compact(
+            'assignedPatients',
+            'todayAppointments',
+            'stats',
+            'recentConsultations',
+            'recentNotifications',
+            'notificationCount'
+        ));
     }
 
     public function DoctorLogout(Request $request)
@@ -103,11 +117,51 @@ class DoctorController extends Controller
         $pharmacies = User::where('role', 'pharmacy')->get();
         $appointments = Appointment::where('patient_id', $patient->id)
             ->where('doctor_id', Auth::id())
-            ->where('status', 'confirmed')
+            ->whereIn('status', ['pending', 'confirmed'])
             ->latest()
             ->get();
 
-        return view('backend.doctor.patients.patients_info', compact('patient', 'pharmacies', 'appointments'));
+        $consultations = DoctorConsultation::where('doctor_id', Auth::id())
+            ->where('patient_id', $patient->id)
+            ->latest('visited_at')
+            ->get();
+
+        $alreadyConsultedToday = DoctorConsultation::where('doctor_id', Auth::id())
+            ->where('patient_id', $patient->id)
+            ->whereDate('visited_at', today())
+            ->exists();
+
+        return view('backend.doctor.patients.patients_info', compact(
+            'patient', 'pharmacies', 'appointments', 'consultations', 'alreadyConsultedToday'
+        ));
+    }
+
+    public function CompleteConsultation(Request $request, $patientId, HospitalBillingService $billingService)
+    {
+        $patient = Patient::findOrFail($patientId);
+        $this->authorize('view', $patient);
+
+        $request->validate([
+            'appointment_id' => ['nullable', 'exists:appointments,id'],
+        ]);
+
+        $doctor = Auth::user();
+        $appointment = null;
+
+        if ($request->appointment_id) {
+            $appointment = Appointment::where('doctor_id', $doctor->id)
+                ->where('patient_id', $patient->id)
+                ->findOrFail($request->appointment_id);
+        }
+
+        $billingService->recordPatientVisit($doctor, $patient, [], $appointment, $doctor);
+
+        $fee = (float) ($doctor->consultation_fee ?? 0);
+
+        return redirect()->route('doctor.dashboard')->with(
+            'success',
+            'Consultation completed. Fee $'.number_format($fee, 2).' added to your dashboard.'
+        );
     }
 
     public function StorePrescription(StorePrescriptionRequest $request)
@@ -238,25 +292,59 @@ class DoctorController extends Controller
     public function Notifications()
     {
         $doctor = Auth::user();
-        $notifications = $doctor->unreadNotifications;
+        $notifications = $doctor->unreadNotifications()->latest()->get();
 
         return view('backend.doctor.notification.notification', compact('notifications'));
+    }
+
+    public function MarkNotificationRead($id, HospitalBillingService $billingService)
+    {
+        $notification = auth()->user()->unreadNotifications()->where('id', $id)->firstOrFail();
+        $data = $notification->data;
+        $redirectUrl = $billingService->resolveNotificationRedirect($data);
+
+        $notification->markAsRead();
+
+        $message = match ($data['type'] ?? '') {
+            'patient_assigned' => 'Opening assigned patient record.',
+            'patient_checked_in' => 'Opening checked-in patient record.',
+            'appointment_created' => 'Opening your appointments list.',
+            default => 'Notification marked as read.',
+        };
+
+        return redirect($redirectUrl)->with('success', $message);
+    }
+
+    public function OpenNotification($id, HospitalBillingService $billingService)
+    {
+        $notification = auth()->user()->notifications()->where('id', $id)->firstOrFail();
+        $redirectUrl = $billingService->resolveNotificationRedirect($notification->data);
+
+        if (is_null($notification->read_at)) {
+            $notification->markAsRead();
+        }
+
+        return redirect($redirectUrl);
     }
 
     public function AcceptAppointment($id)
     {
         $appointment = Appointment::where('doctor_id', Auth::id())->findOrFail($id);
         $appointment->update(['status' => 'confirmed']);
-        auth()->user()->unreadNotifications()->where('data->appointment_id', $id)->delete();
+        auth()->user()->unreadNotifications()
+            ->where('data->appointment_id', $id)
+            ->update(['read_at' => now()]);
 
-        return response()->json(['success' => true]);
+        return response()->json(['success' => true, 'redirect' => route('all.doctor.appointment')]);
     }
 
     public function IgnoreAppointment($id)
     {
         $appointment = Appointment::where('doctor_id', Auth::id())->findOrFail($id);
         $appointment->update(['status' => 'canceled']);
-        auth()->user()->unreadNotifications()->where('data->appointment_id', $id)->delete();
+        auth()->user()->unreadNotifications()
+            ->where('data->appointment_id', $id)
+            ->update(['read_at' => now()]);
 
         return response()->json(['success' => true]);
     }

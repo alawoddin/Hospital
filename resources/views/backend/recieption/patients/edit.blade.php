@@ -41,18 +41,20 @@
             </div>
             <div class="col-xl-4 col-xxl-4 col-lg-4 mx-auto">
                 <label>Doctor: </label>
-                <select class="form-control" id="doctor" name="doctor">
+                <select class="form-control" id="doctor_id" name="doctor_id">
                     @foreach ($doctors as $doctor)
-                        <option value="{{ $doctor->name }}" 
-                            {{ $patients->doctor == $doctor->name ? 'selected' : '' }}>
+                        <option value="{{ $doctor->id }}" @selected($patients->doctor_id == $doctor->id || $patients->doctor == $doctor->name)>
                             {{ $doctor->name }}
                         </option>
                     @endforeach
-                        <option value="{{ $doctor->id }}" {{ $patients->doctor }}></option>
                 </select>
             </div>
         </div>
         <div class="row mb-5">
+            <div class="col-xl-4 col-xxl-4 col-lg-4 mx-auto">
+                <label for="registration_fee">Registration Fee ($): </label>
+                <input type="number" step="0.01" min="0" name="registration_fee" class="form-control" value="{{ $patients->registration_fee ?? 0 }}">
+            </div>
             <div class="col-xl-4 col-xxl-4 col-lg-4 mx-auto">
                 <label for="phone">Phone: </label>
                 <input type="text" id="phone" name="phone" class="form-control" value="{{ $patients->phone}}">

@@ -3,6 +3,45 @@
 <div class="row mt-4">
     <div class="col-xl-10 mx-auto">
         @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
+
+        <div class="card mb-4 border-success">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Complete Consultation (Check Patient)</h5>
+                <span class="badge badge-light">Your fee: ${{ number_format(auth()->user()->consultation_fee ?? 0, 2) }}</span>
+            </div>
+            <div class="card-body">
+                @if($alreadyConsultedToday)
+                    <p class="text-success mb-0">✓ This patient was already checked today. Fee counted on your dashboard.</p>
+                @else
+                    <form action="{{ route('doctor.complete.consultation', $patient->id) }}" method="POST" class="row align-items-end">
+                        @csrf
+                        <div class="col-md-6 mb-2">
+                            <label>Link to appointment (optional)</label>
+                            <select name="appointment_id" class="form-control">
+                                <option value="">No appointment</option>
+                                @foreach($appointments as $appt)
+                                    <option value="{{ $appt->id }}">{{ $appt->appointment_date }} — Token #{{ $appt->token_number }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <button type="submit" class="btn btn-success btn-lg">Complete Consultation &amp; Record Fee</button>
+                        </div>
+                    </form>
+                    <small class="text-muted">Fee is set by admin on your doctor profile (e.g. Neurology $300, OPD $200).</small>
+                @endif
+                @if($consultations->count())
+                    <hr>
+                    <h6>Previous consultations</h6>
+                    <ul class="mb-0">
+                        @foreach($consultations as $c)
+                            <li>{{ $c->visited_at->format('M d, Y') }} — ${{ number_format($c->consultation_fee, 2) }}</li>
+                        @endforeach
+                    </ul>
+                @endif
+            </div>
+        </div>
+
         <div class="card mb-4">
             <div class="card-body">
                 <h3>{{ $patient->name }}</h3>

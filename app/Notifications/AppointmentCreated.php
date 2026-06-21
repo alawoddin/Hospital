@@ -38,6 +38,7 @@ class AppointmentCreated extends Notification
     {
         return [
             'appointment_id'   => $this->appointment->id,
+            'type'             => 'appointment_created',
             'patient_name'     => $this->appointment->patient->name ?? 'Unknown',
             'appointment_date' => $this->appointment->appointment_date ?? 'N/A',
             'appointment_time' => $this->appointment->appointment_time ?? 'N/A',

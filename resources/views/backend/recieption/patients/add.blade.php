@@ -40,15 +40,23 @@
                 </select>   
             </div>
             <div class="col-xl-4 col-xxl-4 col-lg-4 mx-auto">
-                <label>Doctor: </label>
-                <select class="form-control" id="doctor_id" name="doctor_id">
+                <label>Doctor (fee comes from doctor): </label>
+                <select class="form-control" id="doctor_id" name="doctor_id" onchange="showDoctorFee(this)">
                     @foreach ($doctors as $doctor)
-                        <option value="{{ $doctor->id }}">{{ $doctor->name }}</option>
+                        <option value="{{ $doctor->id }}" data-fee="{{ $doctor->consultation_fee }}">{{ $doctor->name }} — ${{ number_format($doctor->consultation_fee ?? 0, 2) }}/visit</option>
                     @endforeach
                 </select>
             </div>
         </div>
         <div class="row mb-5">
+            <div class="col-xl-4 col-xxl-4 col-lg-4 mx-auto">
+                <label for="registration_fee">Registration Fee ($): </label>
+                <input type="number" step="0.01" min="0" id="registration_fee" name="registration_fee" class="form-control" value="50">
+            </div>
+            <div class="col-xl-4 col-xxl-4 col-lg-4 mx-auto">
+                <label>Visit fee (from selected doctor): </label>
+                <input type="text" id="doctor_visit_fee" class="form-control" readonly value="">
+            </div>
             <div class="col-xl-4 col-xxl-4 col-lg-4 mx-auto">
                 <label for="phone">Phone: </label>
                 <input type="text" id="phone" name="phone" class="form-control">
@@ -80,4 +88,15 @@
     </form>
 </div>
 
+<script>
+function showDoctorFee(select) {
+    var opt = select.options[select.selectedIndex];
+    var fee = opt && opt.dataset.fee ? opt.dataset.fee : '0';
+    document.getElementById('doctor_visit_fee').value = '$' + parseFloat(fee).toFixed(2);
+}
+document.addEventListener('DOMContentLoaded', function() {
+    var sel = document.getElementById('doctor_id');
+    if (sel) showDoctorFee(sel);
+});
+</script>
 @endsection

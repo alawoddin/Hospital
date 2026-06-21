@@ -22,7 +22,12 @@ class UserSeeder extends Seeder
 
         User::updateOrCreate(
             ['email' => 'doctor@gmail.com'],
-            ['name' => 'doctor', 'password' => Hash::make('111'), 'role' => 'doctor']
+            ['name' => 'Neurology Doctor', 'password' => Hash::make('111'), 'role' => 'doctor', 'consultation_fee' => 300]
+        );
+
+        User::updateOrCreate(
+            ['email' => 'opd@gmail.com'],
+            ['name' => 'OPD Doctor', 'password' => Hash::make('111'), 'role' => 'doctor', 'consultation_fee' => 200]
         );
 
         User::updateOrCreate(

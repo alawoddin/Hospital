@@ -26,7 +26,7 @@
                         </div>
                         <div class="col-sm-6 mt-2 mt-sm-0">
                             <label>Role: </label>
-                            <select class="form-control" id="sel1" name="role" required>
+                            <select class="form-control" id="sel1" name="role" required onchange="toggleDoctorFee(this.value)">
                                     <option value="admin">Admin</option>
                                     <option value="doctor">Doctor</option>
                                     <option value="recieption">Reception</option>
@@ -36,6 +36,18 @@
                             </select>
                         </div>
                     </div>
+                    <div class="form-row mt-4" id="consultation_fee_row" style="display:none;">
+                        <div class="col-sm-6">
+                            <label for="consultation_fee">Per Patient Fee ($): </label>
+                            <input type="number" step="0.01" min="0" id="consultation_fee" name="consultation_fee" class="form-control" value="250">
+                            <small class="text-muted">Set when adding doctor — e.g. Neurology $300, OPD $200. Reception uses this fee automatically.</small>
+                        </div>
+                    </div>
+                    <script>
+                    function toggleDoctorFee(role) {
+                        document.getElementById('consultation_fee_row').style.display = role === 'doctor' ? 'flex' : 'none';
+                    }
+                    </script>
                     <div class="form-row mt-4">
                         <div class="col-sm-6">
                             <label for="phone">Phone: </label>

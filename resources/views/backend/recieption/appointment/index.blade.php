@@ -27,7 +27,7 @@
                             <td>
                                 <a href="{{ route('edit.appointment', $item->id) }}" class="btn btn-sm btn-info">Edit</a>
                                 <a href="{{ route('appointment.slip', $item->id) }}" class="btn btn-sm btn-secondary" target="_blank">Print</a>
-                                <form action="{{ route('appointment.checkin', $item->id) }}" method="POST" class="d-inline">@csrf<button class="btn btn-sm btn-success">Check-in</button></form>
+                                <a href="{{ route('appointment.checkin.form', $item->id) }}" class="btn btn-sm btn-success">Check-in &amp; Fees</a>
                             </td>
                         </tr>
                         @endforeach

@@ -67,6 +67,15 @@ Route::middleware('auth', 'role:admin')->group(function () {
         Route::get('/admin/departments/edit/{id}', 'EditDepartment')->name('admin.departments.edit');
         Route::post('/admin/departments/update', 'UpdateDepartment')->name('admin.departments.update');
         Route::get('/admin/departments/delete/{id}', 'DeleteDepartment')->name('admin.departments.delete');
+
+        Route::get('/admin/reports', 'Reports')->name('admin.reports');
+
+        Route::get('/admin/fees', 'AllFeeTypes')->name('admin.fees');
+        Route::get('/admin/fees/add', 'AddFeeType')->name('admin.fees.add');
+        Route::post('/admin/fees/store', 'StoreFeeType')->name('admin.fees.store');
+        Route::get('/admin/fees/edit/{id}', 'EditFeeType')->name('admin.fees.edit');
+        Route::post('/admin/fees/update', 'UpdateFeeType')->name('admin.fees.update');
+        Route::get('/admin/fees/delete/{id}', 'DeleteFeeType')->name('admin.fees.delete');
     });
 });
 
@@ -79,6 +88,7 @@ Route::middleware('auth', 'role:doctor')->group(function () {
 
         Route::get('doctor/patients', 'DoctorPatients')->name('doctor.patients');
         Route::get('patients/info/{id}', 'PatientsInfo')->name('patients.info');
+        Route::post('doctor/patients/{id}/complete-consultation', 'CompleteConsultation')->name('doctor.complete.consultation');
         Route::post('/doctor/store/prescription', 'StorePrescription')->name('doctor.store.prescription');
         Route::post('/doctor/patients/{id}/diagnosis', 'StoreDiagnosis')->name('doctor.store.diagnosis');
         Route::post('/doctor/patients/{id}/medical-note', 'StoreMedicalNote')->name('doctor.store.medical_note');
@@ -86,6 +96,8 @@ Route::middleware('auth', 'role:doctor')->group(function () {
         Route::post('/doctor/patients/{id}/lab-request', 'StoreLabRequest')->name('doctor.store.lab_request');
 
         Route::get('/doctor/notifications', 'Notifications')->name('doctor.notifications');
+        Route::get('/doctor/notifications/{id}/read', 'MarkNotificationRead')->name('doctor.notifications.read');
+        Route::get('/doctor/notifications/{id}/open', 'OpenNotification')->name('doctor.notifications.open');
         Route::post('/doctor/appointment/{id}/accept', 'AcceptAppointment')->name('doctor.appointment.accept');
         Route::post('/doctor/appointment/{id}/ignore', 'IgnoreAppointment')->name('doctor.appointment.ignore');
         Route::get('/doctor/appointment/count', 'appointmentCount')->name('doctor.appointment.count');
@@ -116,6 +128,7 @@ Route::middleware('auth', 'role:recieption')->group(function () {
         Route::post('/update/appointment', 'UpdateAppointment')->name('update.appointment');
         Route::get('/delete/appointment/{id}', 'DeleteAppointment')->name('delete.appointment');
         Route::post('/appointment/{id}/check-in', 'CheckInAppointment')->name('appointment.checkin');
+        Route::get('/appointment/{id}/check-in', 'CheckInForm')->name('appointment.checkin.form');
         Route::get('/appointment/{id}/slip', 'PrintAppointmentSlip')->name('appointment.slip');
         Route::get('/doctor/schedules', 'DoctorSchedules')->name('recieption.schedules');
     });

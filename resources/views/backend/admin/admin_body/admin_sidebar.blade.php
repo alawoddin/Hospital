@@ -7,6 +7,7 @@
             <li><a href="{{ route('all.doctors') }}"><span class="nav-text">Doctors</span></a></li>
             <li><a href="{{ route('all.admin.patients') }}"><span class="nav-text">Patients</span></a></li>
             <li><a href="{{ route('admin.departments') }}"><span class="nav-text">Departments</span></a></li>
+            <li><a href="{{ route('admin.reports') }}"><span class="nav-text">Reports</span></a></li>
             <li><a href="{{ route('all.admin.appointments') }}"><span class="nav-text">Appointments</span></a></li>
             <li><a href="{{ route('all.admin.pharmacy') }}"><span class="nav-text">Pharmacy Staff</span></a></li>
             <li><a href="{{ route('all.admin.finance') }}"><span class="nav-text">Finance Staff</span></a></li>

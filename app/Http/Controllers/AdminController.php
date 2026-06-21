@@ -6,7 +6,10 @@ use App\Models\Appointment;
 use App\Models\Bill;
 use App\Models\Department;
 use App\Models\Patient;
+use App\Models\DoctorConsultation;
+use App\Models\FeeType;
 use App\Models\Payment;
+use App\Services\HospitalBillingService;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -92,26 +95,16 @@ class AdminController extends Controller
             $img->resize(150,150)->save(public_path('upload/admin/photo/'.$name_gen));
             $save_url = 'upload/admin/photo/'.$name_gen;
 
-        User::create([
-            'name'=> $request->name,
-            'email'=> $request->email,
-            'phone'=> $request->phone,
-            'address'=> $request->address,
-            'role'=> $request->role,
+        User::create(array_merge($this->userPayload($request), [
             'password' => Hash::make($request->password),
-            'photo'=>$save_url,
-        ]);
+            'photo' => $save_url,
+        ]));
         return redirect()->route('all.users');
 
         }else{
-            User::create([
-            'name'=> $request->name,
-            'email'=> $request->email,
-            'phone'=> $request->phone,
-            'address'=> $request->address,
-            'role'=> $request->role,
+            User::create(array_merge($this->userPayload($request), [
             'password' => Hash::make($request->password),
-            ]);
+            ]));
         }
         return redirect()->route('all.users');
     }
@@ -139,26 +132,16 @@ class AdminController extends Controller
             $img->resize(150,150)->save(public_path('upload/admin/photo/'.$name_gen));
             $save_url = 'upload/admin/photo/'.$name_gen;
 
-        User::find($user_id)->update([
-            'name'=> $request->name,
-            'email'=> $request->email,
-            'phone'=> $request->phone,
-            'address'=> $request->address,
-            'role'=> $request->role,
+        User::find($user_id)->update(array_merge($this->userPayload($request), [
             'password' => Hash::make($request->password),
-            'photo'=>$save_url,
-        ]);
+            'photo' => $save_url,
+        ]));
         return redirect()->route('all.users');
 
         }else{
-            User::find($user_id)->update([
-            'name'=> $request->name,
-            'email'=> $request->email,
-            'phone'=> $request->phone,
-            'address'=> $request->address,
-            'role'=> $request->role,
+            User::find($user_id)->update(array_merge($this->userPayload($request), [
             'password' => Hash::make($request->password),
-            ]);
+            ]));
         }
         return redirect()->route('all.users');
     }
@@ -361,5 +344,132 @@ class AdminController extends Controller
         Department::findOrFail($id)->delete();
 
         return redirect()->route('admin.departments')->with('success', 'Department deleted.');
+    }
+
+    public function AllFeeTypes()
+    {
+        $feeTypes = FeeType::with('department')->latest()->get();
+
+        return view('backend.admin.fees.index', compact('feeTypes'));
+    }
+
+    public function AddFeeType()
+    {
+        $departments = Department::orderBy('name')->get();
+
+        return view('backend.admin.fees.add', compact('departments'));
+    }
+
+    public function StoreFeeType(Request $request)
+    {
+        $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'category' => ['required', 'in:registration,consultation,laboratory'],
+            'amount' => ['required', 'numeric', 'min:0'],
+            'department_id' => ['nullable', 'exists:departments,id'],
+            'description' => ['nullable', 'string'],
+        ]);
+
+        FeeType::create([
+            'name' => $request->name,
+            'category' => $request->category,
+            'amount' => $request->amount,
+            'department_id' => $request->department_id,
+            'description' => $request->description,
+            'is_active' => true,
+        ]);
+
+        return redirect()->route('admin.fees')->with('success', 'Fee type created.');
+    }
+
+    public function EditFeeType($id)
+    {
+        $feeType = FeeType::findOrFail($id);
+        $departments = Department::orderBy('name')->get();
+
+        return view('backend.admin.fees.edit', compact('feeType', 'departments'));
+    }
+
+    public function UpdateFeeType(Request $request)
+    {
+        $feeType = FeeType::findOrFail($request->id);
+
+        $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'category' => ['required', 'in:registration,consultation,laboratory'],
+            'amount' => ['required', 'numeric', 'min:0'],
+            'department_id' => ['nullable', 'exists:departments,id'],
+            'description' => ['nullable', 'string'],
+        ]);
+
+        $feeType->update([
+            'name' => $request->name,
+            'category' => $request->category,
+            'amount' => $request->amount,
+            'department_id' => $request->department_id,
+            'description' => $request->description,
+            'is_active' => $request->boolean('is_active', true),
+        ]);
+
+        return redirect()->route('admin.fees')->with('success', 'Fee type updated.');
+    }
+
+    public function DeleteFeeType($id)
+    {
+        FeeType::findOrFail($id)->delete();
+
+        return redirect()->route('admin.fees')->with('success', 'Fee type deleted.');
+    }
+
+    public function Reports(Request $request, HospitalBillingService $billingService)
+    {
+        $from = $request->from ?? now()->startOfMonth()->toDateString();
+        $to = $request->to ?? now()->endOfMonth()->toDateString();
+
+        $totalPatients = Patient::whereBetween('created_at', [$from.' 00:00:00', $to.' 23:59:59'])->count();
+        $registrationFees = Patient::whereBetween('created_at', [$from.' 00:00:00', $to.' 23:59:59'])->sum('registration_fee');
+        $totalAppointments = Appointment::whereBetween('appointment_date', [$from, $to])->count();
+        $checkedInPatients = DoctorConsultation::whereBetween('visited_at', [$from.' 00:00:00', $to.' 23:59:59'])->count();
+        $consultationFees = DoctorConsultation::whereBetween('visited_at', [$from.' 00:00:00', $to.' 23:59:59'])->sum('consultation_fee');
+        $totalRevenue = Payment::whereBetween('payment_date', [$from, $to])->sum('amount');
+        $pendingBills = Bill::whereIn('status', ['pending', 'partially_paid'])->sum('due_amount');
+
+        $doctors = User::where('role', 'doctor')->get()->map(function ($doctor) use ($billingService, $from, $to) {
+            $monthStats = $billingService->doctorMonthlyStats($doctor);
+            $periodPatients = DoctorConsultation::where('doctor_id', $doctor->id)
+                ->whereBetween('visited_at', [$from.' 00:00:00', $to.' 23:59:59'])
+                ->count();
+            $periodEarnings = DoctorConsultation::where('doctor_id', $doctor->id)
+                ->whereBetween('visited_at', [$from.' 00:00:00', $to.' 23:59:59'])
+                ->sum('consultation_fee');
+
+            return [
+                'doctor' => $doctor,
+                'consultation_fee' => (float) $doctor->consultation_fee,
+                'period_patients' => $periodPatients,
+                'period_earnings' => (float) $periodEarnings,
+                'month_patients' => $monthStats['month_patients'],
+                'year_patients' => $monthStats['year_patients'],
+                'month_earnings' => $monthStats['month_earnings'],
+                'year_earnings' => $monthStats['year_earnings'],
+            ];
+        });
+
+        return view('backend.admin.reports.index', compact(
+            'from', 'to', 'totalPatients', 'registrationFees', 'totalAppointments',
+            'checkedInPatients', 'consultationFees', 'totalRevenue', 'pendingBills', 'doctors'
+        ));
+    }
+
+    private function userPayload(Request $request): array
+    {
+        return [
+            'name' => $request->name,
+            'email' => $request->email,
+            'phone' => $request->phone,
+            'address' => $request->address,
+            'role' => $request->role,
+            'consultation_fee' => $request->role === 'doctor' ? (float) ($request->consultation_fee ?? 0) : 0,
+        ];
     }
 }

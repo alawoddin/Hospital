@@ -8,6 +8,9 @@ use App\Models\Appointment;
 use App\Models\Patient;
 use App\Models\User;
 use App\Notifications\AppointmentCreated;
+use App\Notifications\PatientAssignedToDoctor;
+use App\Notifications\PatientCheckedIn;
+use App\Services\HospitalBillingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -92,7 +95,18 @@ class RecieptionController extends Controller
             $data['photo'] = 'upload/recieption/patients/'.$name_gen;
         }
 
-        Patient::create($data);
+        $patient = Patient::create($data);
+
+        app(HospitalBillingService::class)->createRegistrationBill(
+            $patient->id,
+            (float) ($request->registration_fee ?? 0),
+            'Patient registration'
+        );
+
+        if ($patient->doctor_id) {
+            $doctor = User::find($patient->doctor_id);
+            $doctor?->notify(new PatientAssignedToDoctor($patient));
+        }
 
         return redirect()->route('all.patients')->with('success', 'Patient registered successfully.');
     }
@@ -216,17 +230,51 @@ class RecieptionController extends Controller
         return redirect()->route('all.appointment');
     }
 
-    public function CheckInAppointment($id)
+    public function CheckInForm($id, HospitalBillingService $billingService)
     {
-        $appointment = Appointment::findOrFail($id);
+        $appointment = Appointment::with(['patient', 'doctor'])->findOrFail($id);
         $this->authorize('checkIn', $appointment);
 
-        $appointment->update([
-            'checked_in_at' => now(),
-            'status' => 'confirmed',
+        $laboratoryTests = $billingService->laboratoryTests();
+
+        return view('backend.recieption.appointment.checkin', compact(
+            'appointment', 'laboratoryTests'
+        ));
+    }
+
+    public function CheckInAppointment(Request $request, $id, HospitalBillingService $billingService)
+    {
+        $appointment = Appointment::with(['patient', 'doctor'])->findOrFail($id);
+        $this->authorize('checkIn', $appointment);
+
+        $request->validate([
+            'laboratory_tests' => ['nullable', 'array'],
+            'laboratory_tests.*' => ['string'],
         ]);
 
-        return back()->with('success', 'Patient checked in successfully.');
+        $doctor = $appointment->doctor;
+        if (! $doctor) {
+            return back()->with('error', 'No doctor assigned to this appointment.');
+        }
+
+        $result = $billingService->recordPatientVisit(
+            $doctor,
+            $appointment->patient,
+            $request->laboratory_tests ?? [],
+            $appointment,
+            Auth::user()
+        );
+
+        $doctor->notify(new PatientCheckedIn($appointment->fresh(['patient'])));
+
+        $fee = (float) ($doctor->consultation_fee ?? 0);
+        $labCount = $result['lab_requests']->count();
+        $msg = 'Patient checked in. Dr. '.$doctor->name.' fee: $'.number_format($fee, 2);
+        if ($labCount > 0) {
+            $msg .= ' + '.$labCount.' laboratory test(s). Total bill: $'.number_format($result['total'], 2);
+        }
+
+        return redirect()->route('all.appointment')->with('success', $msg);
     }
 
     public function PrintAppointmentSlip($id)
@@ -277,6 +325,7 @@ class RecieptionController extends Controller
             'email' => $request->email,
             'address' => $request->address,
             'national_id' => $request->national_id,
+            'registration_fee' => (float) ($request->registration_fee ?? 0),
         ];
     }
 

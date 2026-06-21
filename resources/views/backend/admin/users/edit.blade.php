@@ -27,7 +27,7 @@
                         </div>
                         <div class="col-sm-6 mt-2 mt-sm-0">
                             <label>Role: </label>
-                            <select class="form-control" id="sel1" name="role">
+                            <select class="form-control" id="sel1" name="role" onchange="toggleDoctorFeeEdit(this.value)">
                                 <option value="admin" {{ $user->role == 'admin' ? 'selected' : '' }}>Admin</option>
                                 <option value="doctor" {{ $user->role == 'doctor' ? 'selected' : '' }}>Doctor</option>
                                 <option value="recieption" {{ $user->role == 'recieption' ? 'selected' : '' }}>Recieption</option>
@@ -37,6 +37,18 @@
                             </select>
                         </div>
                     </div>
+                    <div class="form-row mt-4" id="consultation_fee_row" style="display:{{ $user->role === 'doctor' ? 'flex' : 'none' }};">
+                        <div class="col-sm-6">
+                            <label for="consultation_fee">Per Patient Fee ($): </label>
+                            <input type="number" step="0.01" min="0" id="consultation_fee" name="consultation_fee" class="form-control" value="{{ $user->consultation_fee ?? 0 }}">
+                            <small class="text-muted">e.g. Neurology $300, OPD $200</small>
+                        </div>
+                    </div>
+                    <script>
+                    function toggleDoctorFeeEdit(role) {
+                        document.getElementById('consultation_fee_row').style.display = role === 'doctor' ? 'flex' : 'none';
+                    }
+                    </script>
                     <div class="form-row mt-4">
                         <div class="col-sm-6">
                             <label for="phone">Phone: </label>
